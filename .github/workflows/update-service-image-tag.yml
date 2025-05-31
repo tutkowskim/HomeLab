@@ -1,0 +1,46 @@
+name: Update Service Image Tag
+
+on:
+  repository_dispatch:
+    types: [update-docker-tag]
+
+jobs:
+  update-yaml:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Update image tag for specific service
+        run: |
+          FILE=docker-compose.yml
+          SERVICE_NAME="${{ github.event.client_payload.service_name }}"
+          IMAGE_NAME="${{ github.event.client_payload.image_name }}"
+          NEW_TAG="${{ github.event.client_payload.new_tag }}"
+
+          TMP_FILE=$(mktemp)
+
+          awk -v service="$SERVICE_NAME" -v image="$IMAGE_NAME" -v tag="$NEW_TAG" '
+            $0 ~ "^[[:space:]]*"service":" {
+              in_service = 1
+            }
+            in_service && /^[[:space:]]*image:/ {
+              print gensub(/^([[:space:]]*image:).*/, "\\1 "image":"tag, 1)
+              next
+            }
+            in_service && /^[[:space:]]*[a-zA-Z0-9_-]+:/ && $0 !~ "^[[:space:]]*image:" {
+              in_service = 0
+            }
+            { print }
+          ' "$FILE" > "$TMP_FILE"
+
+          mv "$TMP_FILE" "$FILE"
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add docker-compose.yml
+          git commit -m "Update ${SERVICE_NAME} image tag to ${{ github.event.client_payload.new_tag }}"
+          git push
