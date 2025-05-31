@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  the_voice:
+    image: tutkowskim/the-voice:0.0.0
+    container_name: TheVoice
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4567/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
