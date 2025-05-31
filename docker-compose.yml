@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   the_voice:
-    image: tutkowskim/the-voice:2025.05.31.1806
+    image: tutkowskim/the-voice:2025.05.31.1825
     container_name: TheVoice
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4567/health"]
