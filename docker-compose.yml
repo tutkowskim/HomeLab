@@ -4,6 +4,8 @@ services:
   the_voice:
     image: tutkowskim/the-voice:0.0.0
     container_name: TheVoice
+    environment:
+      - TOKEN=${THE_VOICE_TOKEN}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4567/health"]
       interval: 30s
