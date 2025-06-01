@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  dns_updater:
+    image: tutkowskim/dns-updater:0.0.0
+    container_name: DnsUpdater
+    environment:
+      - PORT=8080
+      - AWS_REGION=${DNS_UPDATER_AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${DNS_UPDATER_AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${DNS_UPDATER_AWS_SECRET_ACCESS_KEY}
+      - HOSTED_ZONE_ID=${DNS_UPDATER_HOSTED_ZONE_ID}
+      - RECORD_NAME=${DNS_UPDATER_RECORD_NAME}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
   the_voice:
     image: tutkowskim/the-voice:2025.05.31.1842
     container_name: TheVoice
