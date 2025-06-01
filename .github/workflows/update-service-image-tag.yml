@@ -22,7 +22,7 @@ jobs:
           BASE_NAME=$(echo "$IMAGE_NAME" | cut -d: -f1)
 
           # Replace the line that starts with image: and set it to the new tag
-          sed -i "s|^\([[:space:]]*image:\)[[:space:]]${BASE_NAME}\+.*$|\1 ${BASE_NAME}:${NEW_TAG}|" "$FILE"
+          sed -i "s|^\([[:space:]]*image:[[:space:]]*\)${BASE_NAME}:.*$|\1${BASE_NAME}:${NEW_TAG}|" "$FILE"
 
       - name: Commit and push changes
         run: |
