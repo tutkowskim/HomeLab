@@ -19,7 +19,7 @@ services:
       start_period: 10s
     restart: unless-stopped
   the_voice:
-    image: tutkowskim/the-voice:2025.05.31.1842
+    image: tutkowskim/the-voice:2025.05.31.2057
     container_name: TheVoice
     environment:
       - TOKEN=${THE_VOICE_TOKEN}
