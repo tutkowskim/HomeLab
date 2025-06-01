@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   dns_updater:
-    image: tutkowskim/dns-updater:0.0.0
+    image: tutkowskim/the-voice:2025.06.01.1835
     container_name: DnsUpdater
     environment:
       - PORT=8080
@@ -19,7 +19,7 @@ services:
       start_period: 10s
     restart: unless-stopped
   the_voice:
-    image: tutkowskim/the-voice:2025.05.31.2057
+    image: tutkowskim/the-voice:2025.06.01.1835
     container_name: TheVoice
     environment:
       - TOKEN=${THE_VOICE_TOKEN}
