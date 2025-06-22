@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   dns_updater:
-    image: tutkowskim/dns-updater:2025.06.22.1759
+    image: tutkowskim/dns-updater:2025.06.22.1803
     container_name: DnsUpdater
     environment:
       - PORT=8080
