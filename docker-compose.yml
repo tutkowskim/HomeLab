@@ -5,10 +5,16 @@ services:
     image: grafana/alloy:v1.1.0-boringcrypto
     container_name: GrafanaAlloy
     restart: unless-stopped
-    volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - ./alloy/data:/var/lib/alloy
-    command: ["run", "/etc/alloy/config.alloy"]
+
+    # Environment variables — one for your config, others for secrets
+    environment:
+      - ALLOY_CONFIG=${ALLOY_CONFIG}
+      - ALLOY_PROMETHEUS_REMOTE_WRITE_URL=${ALLOY_PROMETHEUS_REMOTE_WRITE_URL}
+      - ALLOY_PROMETHEUS_REMOTE_WRITE_USERNAME=${ALLOY_PROMETHEUS_REMOTE_WRITE_USERNAME}
+      - ALLOY_PROMETHEUS_REMOTE_WRITE_PASSWORD=${ALLOY_PROMETHEUS_REMOTE_WRITE_PASSWORD}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS}
+    command: sh -c 'echo "$ALLOY_CONFIG" > /tmp/config.alloy && /usr/bin/alloy run /tmp/config.alloy'
     ports:
       - "12345:12345"
   dns_updater:
