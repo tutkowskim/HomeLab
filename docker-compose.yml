@@ -1,6 +1,16 @@
 version: '3.8'
 
 services:
+  grafana-alloy:
+    image: grafana/alloy:v1.1.0-boringcrypto
+    container_name: grafana-alloy
+    restart: unless-stopped
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./alloy/data:/var/lib/alloy
+    command: ["run", "/etc/alloy/config.alloy"]
+    ports:
+      - "12345:12345"
   dns_updater:
     image: tutkowskim/dns-updater:2025.06.01.1924
     container_name: DnsUpdater
