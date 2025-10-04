@@ -14,7 +14,10 @@ services:
       - ALLOY_PROMETHEUS_REMOTE_WRITE_PASSWORD=${ALLOY_PROMETHEUS_REMOTE_WRITE_PASSWORD}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
       - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS}
-    command: sh -c 'echo "$ALLOY_CONFIG" > /tmp/config.alloy && /usr/bin/alloy run /tmp/config.alloy'
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      'echo "$ALLOY_CONFIG" > /tmp/config.alloy &&
+       /usr/bin/alloy run /tmp/config.alloy'
     ports:
       - "12345:12345"
   dns_updater:
