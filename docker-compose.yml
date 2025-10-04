@@ -17,7 +17,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: >
       'echo "$ALLOY_CONFIG" > /tmp/config.alloy &&
-       /usr/bin/alloy run /tmp/config.alloy'
+       /usr/bin/alloy run --server.http.listen-addr=0.0.0.0:12345 /tmp/config.alloy'
     ports:
       - "12345:12345"
   dns_updater:
