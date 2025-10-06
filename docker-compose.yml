@@ -37,6 +37,7 @@ services:
     container_name: TheVoice
     environment:
       - TOKEN=${THE_VOICE_TOKEN}
+      - GEMINI_API_KEY=${THE_VOICE_GEMINI_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4567/health"]
       interval: 30s
