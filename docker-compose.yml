@@ -1,20 +1,6 @@
 version: '3.8'
 
 services:
-  grafana-alloy:
-    image: grafana/alloy:v1.1.0-boringcrypto
-    container_name: GrafanaAlloy
-    restart: unless-stopped
-    environment:
-      - ALLOY_CONFIG=server { http { listen_address = "0.0.0.0" listen_port = 12345 } } otlp "receiver" { grpc { listen_address = "0.0.0.0" listen_port = 4317 } http { listen_address = "0.0.0.0" listen_port = 4318 } } otlp "exporter_grafana" { client { endpoint = env("OTEL_EXPORTER_OTLP_ENDPOINT") headers = { "Authorization" = env("OTEL_EXPORTER_OTLP_TOKEN") } } } traces "default" { receivers = [otlp.receiver.input] exporters = [otlp.exporter_grafana.output] } metrics "default" { receivers = [otlp.receiver.input] exporters = [otlp.exporter_grafana.output] } logs "default" { receivers = [otlp.receiver.input] exporters = [otlp.exporter_grafana.output] }
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${ALLOY_OTEL_EXPORTER_OTLP_ENDPOINT}
-      - OTEL_EXPORTER_OTLP_TOKEN=${ALLOY_OTEL_EXPORTER_OTLP_TOKEN}
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      'echo "$ALLOY_CONFIG" > /tmp/config.alloy &&
-       /usr/bin/alloy run --server.http.listen-addr=0.0.0.0:12345 /tmp/config.alloy'
-    ports:
-      - "12345:12345"
   dns_updater:
     image: tutkowskim/dns-updater:2025.06.22.2305
     container_name: DnsUpdater
