@@ -20,7 +20,7 @@ services:
     image: tutkowskim/the-voice:2025.12.18.0306
     container_name: TheVoice
     environment:
-      - DISCORD_TOKEN=${THE_VOICE_TOKEN}
+      - TOKEN=${THE_VOICE_TOKEN}
       - OPENAI_API_KEY=${THE_VOICE_OPENAI_API_KEY}
       - OPENAI_MODEL=gpt-5.2
     healthcheck:
