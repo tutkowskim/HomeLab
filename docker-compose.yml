@@ -24,9 +24,6 @@ services:
       - DISCORD_TOKEN=${THE_VOICE_TOKEN}
       - OPENAI_API_KEY=${THE_VOICE_OPENAI_API_KEY}
       - OPENAI_MODEL=gpt-5.2
-      - ASK_CHANNEL_NAME=ask-me-anything
-      - FACT_CHANNEL_NAME=interesting-fact-of-the-day
-      - SYSTEM_PROMPT=You are a helpful assistant answering questions for the Discord server. Use web_search when you need fresh facts.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4567/health"]
       interval: 30s
