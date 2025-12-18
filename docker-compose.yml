@@ -18,7 +18,6 @@ services:
     restart: unless-stopped
   the_voice:
     image: tutkowskim/the-voice:2025.12.18.0306
-    platform: linux/amd64
     container_name: TheVoice
     environment:
       - DISCORD_TOKEN=${THE_VOICE_TOKEN}
