@@ -17,7 +17,7 @@ services:
       start_period: 10s
     restart: unless-stopped
   the_voice:
-    image: tutkowskim/the-voice:2025.12.15.0132
+    image: tutkowskim/the-voice:2025.12.18.0250
     platform: linux/amd64
     container_name: TheVoice
     environment:
