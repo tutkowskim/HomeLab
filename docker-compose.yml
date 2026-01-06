@@ -4,6 +4,7 @@ services:
     container_name: DnsUpdater
     environment:
       - PORT=8080
+      - SENTRY_DSN={DNS_UPDATER_SENTRY_DSN}
       - AWS_REGION=${DNS_UPDATER_AWS_REGION}
       - AWS_ACCESS_KEY_ID=${DNS_UPDATER_AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${DNS_UPDATER_AWS_SECRET_ACCESS_KEY}
@@ -20,6 +21,7 @@ services:
     image: tutkowskim/the-voice:2025.12.18.0306
     container_name: TheVoice
     environment:
+      - SENTRY_DSN={THE_VOICE_SENTRY_DSN}
       - TOKEN=${THE_VOICE_TOKEN}
       - OPENAI_API_KEY=${THE_VOICE_OPENAI_API_KEY}
       - OPENAI_MODEL=gpt-5.2
