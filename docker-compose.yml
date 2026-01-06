@@ -1,6 +1,6 @@
 services:
   dns_updater:
-    image: tutkowskim/dns-updater:2026.01.06.0435
+    image: tutkowskim/dns-updater:2026.01.06.0456
     container_name: DnsUpdater
     environment:
       - PORT=8080
