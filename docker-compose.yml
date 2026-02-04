@@ -79,6 +79,21 @@ services:
       - INTERVAL=60s
     ports:
       - "9617:9617"
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9100:9100"
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -87,12 +102,17 @@ services:
       - /bin/sh
       - -c
       - |
-        echo "global:
+        cat <<'EOF' > /etc/prometheus/prometheus.yml
+        global:
           scrape_interval: 1m
         scrape_configs:
           - job_name: 'pihole'
             static_configs:
-              - targets: ['pihole-exporter:9617']" > /etc/prometheus/prometheus.yml;
+              - targets: ['pihole-exporter:9617']
+          - job_name: 'node'
+            static_configs:
+              - targets: ['node-exporter:9100']
+        EOF
         /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
     volumes:
       - prometheus_data:/prometheus
