@@ -113,7 +113,10 @@ services:
             static_configs:
               - targets: ['node-exporter:9100']
         EOF
-        /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+        /bin/prometheus \
+          --config.file=/etc/prometheus/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=180d
     volumes:
       - prometheus_data:/prometheus
     ports:
