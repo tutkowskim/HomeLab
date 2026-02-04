@@ -74,7 +74,7 @@ services:
     container_name: pihole-exporter
     restart: unless-stopped
     environment:
-      - PIHOLE_HOSTNAME=192.168.0.11
+      - PIHOLE_HOSTNAME=pihole.tutkowski.com
       - PIHOLE_PASSWORD=${PIHOLE_API_PASSWORD}
       - INTERVAL=60s
     ports:
