@@ -69,3 +69,45 @@ services:
       # Optional, if Pi-hole should get some more processing time
       - SYS_NICE
     restart: unless-stopped
+  pihole-exporter:
+    image: ekofr/pihole-exporter:latest
+    container_name: pihole-exporter
+    restart: unless-stopped
+    environment:
+      - PIHOLE_HOSTNAME=192.168.0.11
+      - PIHOLE_PASSWORD=${PIHOLE_API_PASSWORD}
+      - INTERVAL=60s
+    ports:
+      - "9617:9617"
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "global:
+          scrape_interval: 1m
+        scrape_configs:
+          - job_name: 'pihole'
+            static_configs:
+              - targets: ['pihole-exporter:9617']" > /etc/prometheus/prometheus.yml;
+        /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+    volumes:
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # You'll change this on first login
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+volumes:
+  prometheus_data:
+  grafana_data:
