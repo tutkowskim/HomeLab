@@ -129,9 +129,9 @@ services:
       - "4317:4317"    # OTLP gRPC (your Java app sends here)
       - "4318:4318"    # OTLP HTTP  (optional)
       - "12345:12345"  # Alloy UI (optional)
-    command: ["/bin/alloy", "run", "/etc/alloy/config.alloy"]
+    command: ["/bin/alloy", "run", "/etc/alloy"]
     volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./alloy/config.alloy:/etc/alloy:ro
     depends_on:
       - loki
       - tempo
