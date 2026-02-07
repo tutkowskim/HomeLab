@@ -105,10 +105,10 @@ services:
     restart: unless-stopped
     ports:
       - "3100:3100"
-    command: ["-config.file=/etc/loki"]
+    command: ["-config.file=/etc/loki/loki.yml"]
     volumes:
       - loki_data:/loki
-      - ./loki/loki.yml:/etc/loki:ro
+      - ./loki:/etc/loki:ro
 
   tempo:
     image: grafana/tempo:latest
@@ -116,10 +116,10 @@ services:
     restart: unless-stopped
     ports:
       - "3200:3200" # Tempo query API
-    command: ["/tempo", "-config.file=/etc/tempo/tempo.yml"]
+    command: ["/tempo", "-config.file=/etc/tempo"]
     volumes:
       - tempo_data:/var/tempo
-      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - ./tempo/tempo.yml:/etc/tempo:ro
 
   alloy:
     image: grafana/alloy:latest
@@ -129,7 +129,7 @@ services:
       - "4317:4317"    # OTLP gRPC (your Java app sends here)
       - "4318:4318"    # OTLP HTTP  (optional)
       - "12345:12345"  # Alloy UI (optional)
-    command: ["/bin/alloy", "run", "/etc/alloy"]
+    command: ["run", "/etc/alloy"]
     volumes:
       - ./alloy/config.alloy:/etc/alloy:ro
     depends_on:
