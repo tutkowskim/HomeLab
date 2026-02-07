@@ -105,7 +105,7 @@ services:
     restart: unless-stopped
     ports:
       - "3100:3100"
-    command: ["-config.file=/etc/loki/loki.yml"]
+    command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
       - loki_data:/loki
       - ./loki:/etc/loki:ro
@@ -116,10 +116,10 @@ services:
     restart: unless-stopped
     ports:
       - "3200:3200" # Tempo query API
-    command: ["/tempo", "-config.file=/etc/tempo"]
+    command: ["/tempo", "-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - tempo_data:/var/tempo
-      - ./tempo/tempo.yml:/etc/tempo:ro
+      - ./tempo:/etc/tempo:ro
 
   alloy:
     image: grafana/alloy:latest
