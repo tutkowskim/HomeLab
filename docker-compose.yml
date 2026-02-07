@@ -105,10 +105,10 @@ services:
     restart: unless-stopped
     ports:
       - "3100:3100"
-    command: ["-config.file=/etc/loki"]
+    command: ["-config.file=/etc/loki/config.yaml"]
     configs:
       - source: loki_config
-        target: /etc/loki
+        target: /etc/loki/config.yaml
     volumes:
       - loki_data:/loki
 
@@ -118,10 +118,10 @@ services:
     restart: unless-stopped
     ports:
       - "3200:3200" # Tempo query API
-    command: ["/tempo", "-config.file=/etc/tempo"]
+    command: ["/tempo", "-config.file=/etc/tempo/config.yaml"]
     configs:
       - source: tempo_config
-        target: /etc/tempo
+        target: /etc/tempo/config.yaml
     volumes:
       - tempo_data:/var/tempo
 
@@ -133,10 +133,10 @@ services:
       - "4317:4317"    # OTLP gRPC (your Java app sends here)
       - "4318:4318"    # OTLP HTTP  (optional)
       - "12345:12345"  # Alloy UI (optional)
-    command: ["run", "/etc/alloy"]
+    command: ["run", "/etc/alloy/config.alloy"]
     configs:
       - source: alloy_config
-        target: /etc/alloy
+        target: /etc/alloy/config.alloy
     depends_on:
       - loki
       - tempo
@@ -147,12 +147,12 @@ services:
     restart: unless-stopped
     command:
       - /bin/prometheus
-      - --config.file=/etc/prometheus
+      - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=15d
     configs:
       - source: prometheus_config
-        target: /etc/prometheus
+        target: /etc/prometheus/prometheus.yml
     volumes:
       - prometheus_data:/prometheus
     ports:
