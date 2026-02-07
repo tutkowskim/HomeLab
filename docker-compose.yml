@@ -179,7 +179,7 @@ services:
       - "80:80"
     configs:
       - source: nginx_config
-        target: /etc/nginx/conf.d/homelab.conf
+        target: /etc/nginx/conf.d/default.conf
 
 configs:
   loki_config:
