@@ -105,48 +105,10 @@ services:
     restart: unless-stopped
     ports:
       - "3100:3100"
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        cat <<'EOF' > /etc/loki.yml
-        auth_enabled: false
-
-        server:
-          http_listen_port: 3100
-
-        common:
-          path_prefix: /loki
-          storage:
-            filesystem:
-              chunks_directory: /loki/chunks
-              rules_directory: /loki/rules
-          replication_factor: 1
-          ring:
-            kvstore:
-              store: inmemory
-
-        limits_config:
-          retention_period: 15d
-
-        compactor:
-          working_directory: /loki/compactor
-          retention_enabled: true
-          delete_request_store: filesystem
-
-        schema_config:
-          configs:
-            - from: 2024-01-01
-              store: tsdb
-              object_store: filesystem
-              schema: v13
-              index:
-                prefix: loki_index_
-                period: 24h
-        EOF
-        exec /usr/bin/loki -config.file=/etc/loki.yml
+    command: ["/usr/bin/loki", "-config.file=/etc/loki/loki.yml"]
     volumes:
       - loki_data:/loki
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
 
   tempo:
     image: grafana/tempo:latest
@@ -154,33 +116,10 @@ services:
     restart: unless-stopped
     ports:
       - "3200:3200" # Tempo query API
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        cat <<'EOF' > /etc/tempo.yml
-        server:
-          http_listen_port: 3200
-
-        distributor:
-          receivers:
-            otlp:
-              protocols:
-                grpc:
-                http:
-
-        storage:
-          trace:
-            backend: local
-            local:
-              path: /var/tempo/traces
-        compactor:
-          compaction:
-            block_retention: 360h
-        EOF
-        exec /tempo -config.file=/etc/tempo.yml
+    command: ["/tempo", "-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - tempo_data:/var/tempo
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
 
   alloy:
     image: grafana/alloy:latest
@@ -190,65 +129,9 @@ services:
       - "4317:4317"    # OTLP gRPC (your Java app sends here)
       - "4318:4318"    # OTLP HTTP  (optional)
       - "12345:12345"  # Alloy UI (optional)
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        cat <<'EOF' > /etc/alloy/config.alloy
-        // Receive OTLP from apps
-        otelcol.receiver.otlp "ingest" {
-          grpc { endpoint = "0.0.0.0:4317" }
-          http { endpoint = "0.0.0.0:4318" }
-        }
-
-        otelcol.processor.batch "batch" {}
-
-        // Traces -> Tempo (OTLP gRPC inside the docker network)
-        otelcol.exporter.otlp "tempo" {
-          client { endpoint = "tempo:4317" }
-        }
-
-        // Logs -> Loki
-        otelcol.exporter.loki "loki" {
-          forward_to = [loki.write.default.receiver]
-        }
-
-        loki.write "default" {
-          endpoint { url = "http://loki:3100/loki/api/v1/push" }
-        }
-
-        // Metrics -> Prometheus scrape endpoint (Alloy exposes :9464)
-        otelcol.exporter.prometheus "prom" {
-          forward_to = [prometheus.exporter.self.receiver]
-        }
-
-        prometheus.exporter "self" {
-          listen_address = "0.0.0.0"
-          listen_port    = 9464
-        }
-
-        // Pipelines
-        otelcol.service "pipelines" {
-          pipelines {
-            traces {
-              receivers  = [otelcol.receiver.otlp.ingest]
-              processors = [otelcol.processor.batch.batch]
-              exporters  = [otelcol.exporter.otlp.tempo]
-            }
-            logs {
-              receivers  = [otelcol.receiver.otlp.ingest]
-              processors = [otelcol.processor.batch.batch]
-              exporters  = [otelcol.exporter.loki.loki]
-            }
-            metrics {
-              receivers  = [otelcol.receiver.otlp.ingest]
-              processors = [otelcol.processor.batch.batch]
-              exporters  = [otelcol.exporter.prometheus.prom]
-            }
-          }
-        }
-        EOF
-        exec /bin/alloy run /etc/alloy/config.alloy
+    command: ["/bin/alloy", "run", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
     depends_on:
       - loki
       - tempo
@@ -257,30 +140,14 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     restart: unless-stopped
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        cat <<'EOF' > /etc/prometheus/prometheus.yml
-        global:
-          scrape_interval: 1m
-        scrape_configs:
-          - job_name: 'alloy'
-            static_configs:
-              - targets: ['alloy:9464']
-          - job_name: 'pihole'
-            static_configs:
-              - targets: ['pihole-exporter:9617']
-          - job_name: 'node'
-            static_configs:
-              - targets: ['node-exporter:9100']
-        EOF
-        /bin/prometheus \
-          --config.file=/etc/prometheus/prometheus.yml \
-          --storage.tsdb.path=/prometheus \
-          --storage.tsdb.retention.time=15d
+    command:
+      - /bin/prometheus
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
     volumes:
       - prometheus_data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     depends_on:
