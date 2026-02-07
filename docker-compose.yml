@@ -166,6 +166,8 @@ services:
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin # You'll change this on first login
+      - GF_SERVER_DOMAIN=grafana.tutkowski.com
+      - GF_SERVER_ROOT_URL=http://grafana.tutkowski.com
     ports:
       - "3001:3000"
     volumes:
@@ -329,7 +331,13 @@ configs:
           server_name grafana.tutkowski.com;
           location / {
               proxy_pass http://grafana:3000;
+              proxy_http_version 1.1;
               proxy_set_header Host $$host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_set_header Upgrade $$http_upgrade;
+              proxy_set_header Connection "upgrade";
           }
       }
 
