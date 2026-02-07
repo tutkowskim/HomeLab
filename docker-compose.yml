@@ -17,6 +17,7 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
   the_voice:
     image: tutkowskim/the-voice:2026.01.11.0126
     container_name: TheVoice
@@ -32,6 +33,7 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
   pihole: # More info at https://github.com/pi-hole/docker-pi-hole/ and https://docs.pi-hole.net/
     container_name: pihole
     image: pihole/pihole:latest
@@ -69,6 +71,7 @@ services:
       # Optional, if Pi-hole should get some more processing time
       - SYS_NICE
     restart: unless-stopped
+
   pihole-exporter:
     image: ekofr/pihole-exporter:latest
     container_name: pihole-exporter
@@ -79,6 +82,7 @@ services:
       - INTERVAL=60s
     ports:
       - "9617:9617"
+
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
@@ -94,6 +98,161 @@ services:
       - /:/rootfs:ro
     ports:
       - "9100:9100"
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat <<'EOF' > /etc/loki.yml
+        auth_enabled: false
+
+        server:
+          http_listen_port: 3100
+
+        common:
+          path_prefix: /loki
+          storage:
+            filesystem:
+              chunks_directory: /loki/chunks
+              rules_directory: /loki/rules
+          replication_factor: 1
+          ring:
+            kvstore:
+              store: inmemory
+
+        limits_config:
+          retention_period: 15d
+
+        compactor:
+          working_directory: /loki/compactor
+          retention_enabled: true
+          delete_request_store: filesystem
+
+        schema_config:
+          configs:
+            - from: 2024-01-01
+              store: tsdb
+              object_store: filesystem
+              schema: v13
+              index:
+                prefix: loki_index_
+                period: 24h
+        EOF
+        exec /usr/bin/loki -config.file=/etc/loki.yml
+    volumes:
+      - loki_data:/loki
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    restart: unless-stopped
+    ports:
+      - "3200:3200" # Tempo query API
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat <<'EOF' > /etc/tempo.yml
+        server:
+          http_listen_port: 3200
+
+        distributor:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                http:
+
+        storage:
+          trace:
+            backend: local
+            local:
+              path: /var/tempo/traces
+        compactor:
+          compaction:
+            block_retention: 360h
+        EOF
+        exec /tempo -config.file=/etc/tempo.yml
+    volumes:
+      - tempo_data:/var/tempo
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    restart: unless-stopped
+    ports:
+      - "4317:4317"    # OTLP gRPC (your Java app sends here)
+      - "4318:4318"    # OTLP HTTP  (optional)
+      - "12345:12345"  # Alloy UI (optional)
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat <<'EOF' > /etc/alloy/config.alloy
+        // Receive OTLP from apps
+        otelcol.receiver.otlp "ingest" {
+          grpc { endpoint = "0.0.0.0:4317" }
+          http { endpoint = "0.0.0.0:4318" }
+        }
+
+        otelcol.processor.batch "batch" {}
+
+        // Traces -> Tempo (OTLP gRPC inside the docker network)
+        otelcol.exporter.otlp "tempo" {
+          client { endpoint = "tempo:4317" }
+        }
+
+        // Logs -> Loki
+        otelcol.exporter.loki "loki" {
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.write "default" {
+          endpoint { url = "http://loki:3100/loki/api/v1/push" }
+        }
+
+        // Metrics -> Prometheus scrape endpoint (Alloy exposes :9464)
+        otelcol.exporter.prometheus "prom" {
+          forward_to = [prometheus.exporter.self.receiver]
+        }
+
+        prometheus.exporter "self" {
+          listen_address = "0.0.0.0"
+          listen_port    = 9464
+        }
+
+        // Pipelines
+        otelcol.service "pipelines" {
+          pipelines {
+            traces {
+              receivers  = [otelcol.receiver.otlp.ingest]
+              processors = [otelcol.processor.batch.batch]
+              exporters  = [otelcol.exporter.otlp.tempo]
+            }
+            logs {
+              receivers  = [otelcol.receiver.otlp.ingest]
+              processors = [otelcol.processor.batch.batch]
+              exporters  = [otelcol.exporter.loki.loki]
+            }
+            metrics {
+              receivers  = [otelcol.receiver.otlp.ingest]
+              processors = [otelcol.processor.batch.batch]
+              exporters  = [otelcol.exporter.prometheus.prom]
+            }
+          }
+        }
+        EOF
+        exec /bin/alloy run /etc/alloy/config.alloy
+    depends_on:
+      - loki
+      - tempo
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -106,6 +265,9 @@ services:
         global:
           scrape_interval: 1m
         scrape_configs:
+          - job_name: 'alloy'
+            static_configs:
+              - targets: ['alloy:9464']
           - job_name: 'pihole'
             static_configs:
               - targets: ['pihole-exporter:9617']
@@ -121,6 +283,9 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    depends_on:
+      - alloy
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -131,6 +296,7 @@ services:
       - "3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -172,6 +338,9 @@ services:
         }
         EOF
         exec nginx -g 'daemon off;'
+
 volumes:
   prometheus_data:
   grafana_data:
+  loki_data:
+  tempo_data:
