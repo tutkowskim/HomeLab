@@ -142,12 +142,12 @@ services:
     restart: unless-stopped
     command:
       - /bin/prometheus
-      - --config.file=/etc/prometheus/prometheus.yml
+      - --config.file=/etc/prometheus
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=15d
     volumes:
       - prometheus_data:/prometheus
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus:ro
     ports:
       - "9090:9090"
     depends_on:
