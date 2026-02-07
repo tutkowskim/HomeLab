@@ -106,9 +106,11 @@ services:
     ports:
       - "3100:3100"
     command: ["-config.file=/etc/loki"]
+    configs:
+      - source: loki_config
+        target: /etc/loki
     volumes:
       - loki_data:/loki
-      - ./loki/config.yaml:/etc/loki:ro
 
   tempo:
     image: grafana/tempo:latest
@@ -117,9 +119,11 @@ services:
     ports:
       - "3200:3200" # Tempo query API
     command: ["/tempo", "-config.file=/etc/tempo"]
+    configs:
+      - source: tempo_config
+        target: /etc/tempo
     volumes:
       - tempo_data:/var/tempo
-      - ./tempo/config.yaml:/etc/tempo:ro
 
   alloy:
     image: grafana/alloy:latest
@@ -130,8 +134,9 @@ services:
       - "4318:4318"    # OTLP HTTP  (optional)
       - "12345:12345"  # Alloy UI (optional)
     command: ["run", "/etc/alloy"]
-    volumes:
-      - ./alloy/config.alloy:/etc/alloy:ro
+    configs:
+      - source: alloy_config
+        target: /etc/alloy
     depends_on:
       - loki
       - tempo
@@ -145,9 +150,11 @@ services:
       - --config.file=/etc/prometheus
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=15d
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus
     volumes:
       - prometheus_data:/prometheus
-      - ./prometheus/prometheus.yml:/etc/prometheus:ro
     ports:
       - "9090:9090"
     depends_on:
@@ -170,8 +177,170 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-    volumes:
-      - ./nginx/homelab.conf:/etc/nginx/conf.d/homelab.conf:ro
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/conf.d/homelab.conf
+
+configs:
+  loki_config:
+    content: |
+      auth_enabled: false
+
+      server:
+        http_listen_port: 3100
+
+      common:
+        path_prefix: /loki
+        storage:
+          filesystem:
+            chunks_directory: /loki/chunks
+            rules_directory: /loki/rules
+        replication_factor: 1
+        ring:
+          kvstore:
+            store: inmemory
+
+      limits_config:
+        retention_period: 15d
+
+      compactor:
+        working_directory: /loki/compactor
+        retention_enabled: true
+        delete_request_store: filesystem
+
+      schema_config:
+        configs:
+          - from: 2024-01-01
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+
+  tempo_config:
+    content: |
+      server:
+        http_listen_port: 3200
+
+      distributor:
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+              http:
+
+      storage:
+        trace:
+          backend: local
+          local:
+            path: /var/tempo/traces
+
+      compactor:
+        compaction:
+          block_retention: 360h
+
+  alloy_config:
+    content: |
+      // Receive OTLP from apps
+      otelcol.receiver.otlp "ingest" {
+        grpc { endpoint = "0.0.0.0:4317" }
+        http { endpoint = "0.0.0.0:4318" }
+      }
+
+      otelcol.processor.batch "batch" {}
+
+      // Traces -> Tempo (OTLP gRPC inside the docker network)
+      otelcol.exporter.otlp "tempo" {
+        client { endpoint = "tempo:4317" }
+      }
+
+      // Logs -> Loki
+      otelcol.exporter.loki "loki" {
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint { url = "http://loki:3100/loki/api/v1/push" }
+      }
+
+      // Metrics -> Prometheus scrape endpoint (Alloy exposes :9464)
+      otelcol.exporter.prometheus "prom" {
+        forward_to = [prometheus.exporter.self.receiver]
+      }
+
+      prometheus.exporter "self" {
+        listen_address = "0.0.0.0"
+        listen_port    = 9464
+      }
+
+      // Pipelines
+      otelcol.service "pipelines" {
+        pipelines {
+          traces {
+            receivers  = [otelcol.receiver.otlp.ingest]
+            processors = [otelcol.processor.batch.batch]
+            exporters  = [otelcol.exporter.otlp.tempo]
+          }
+          logs {
+            receivers  = [otelcol.receiver.otlp.ingest]
+            processors = [otelcol.processor.batch.batch]
+            exporters  = [otelcol.exporter.loki.loki]
+          }
+          metrics {
+            receivers  = [otelcol.receiver.otlp.ingest]
+            processors = [otelcol.processor.batch.batch]
+            exporters  = [otelcol.exporter.prometheus.prom]
+          }
+        }
+      }
+
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 1m
+      scrape_configs:
+        - job_name: 'alloy'
+          static_configs:
+            - targets: ['alloy:9464']
+        - job_name: 'pihole'
+          static_configs:
+            - targets: ['pihole-exporter:9617']
+        - job_name: 'node'
+          static_configs:
+            - targets: ['node-exporter:9100']
+
+  nginx_config:
+    content: |
+      server {
+          listen 80;
+          server_name portainer.tutkowski.com;
+          location / {
+              proxy_pass http://192.168.11:9000;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $$http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_set_header Host $$host;
+          }
+      }
+
+      server {
+          listen 80;
+          server_name grafana.tutkowski.com;
+          location / {
+              proxy_pass http://grafana:3000;
+              proxy_set_header Host $$host;
+          }
+      }
+
+      server {
+          listen 80;
+          server_name pihole.tutkowski.com;
+          location / {
+              proxy_pass http://pihole:80;
+              proxy_set_header Host $$host;
+          }
+      }
 
 volumes:
   prometheus_data:
