@@ -176,47 +176,9 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     configs:
       - source: nginx_config
         target: /etc/nginx/conf.d/default.conf
-    volumes:
-      - nginx_certs:/etc/nginx/certs
-    depends_on:
-      - certgen
-
-  certgen:
-    image: alpine:3.20
-    container_name: certgen
-    restart: "no"
-    volumes:
-      - nginx_certs:/etc/nginx/certs
-    entrypoint: /bin/sh -c
-    command: >
-      "set -e;
-       apk add --no-cache openssl >/dev/null;
-       CA_KEY=/etc/nginx/certs/local-ca.key;
-       CA_CRT=/etc/nginx/certs/local-ca.crt;
-       if [ ! -f $$CA_KEY ] || [ ! -f $$CA_CRT ]; then
-         openssl req -x509 -nodes -newkey rsa:4096 -days 3650
-           -keyout $$CA_KEY
-           -out $$CA_CRT
-           -subj \"/CN=HomeLab Local CA\";
-       fi;
-       for host in portainer.tutkowski.com grafana.tutkowski.com pihole.tutkowski.com ca.tutkowski.com; do
-         if [ ! -f /etc/nginx/certs/$$host.key ] || [ ! -f /etc/nginx/certs/$$host.crt ]; then
-           openssl req -nodes -newkey rsa:2048
-             -keyout /etc/nginx/certs/$$host.key
-             -out /etc/nginx/certs/$$host.csr
-             -subj \"/CN=$$host\";
-           printf \"[v3]\\nsubjectAltName=DNS:$$host\\n\" > /etc/nginx/certs/$$host.ext;
-           openssl x509 -req -in /etc/nginx/certs/$$host.csr
-             -CA $$CA_CRT -CAkey $$CA_KEY -CAcreateserial
-             -out /etc/nginx/certs/$$host.crt -days 825 -sha256
-             -extfile /etc/nginx/certs/$$host.ext -extensions v3;
-           rm -f /etc/nginx/certs/$$host.csr /etc/nginx/certs/$$host.ext;
-         fi;
-       done"
 
 configs:
   loki_config:
@@ -349,18 +311,6 @@ configs:
           listen 80;
           server_name portainer.tutkowski.com;
           location / {
-              return 301 https://$$host$$request_uri;
-          }
-      }
-
-      server {
-          listen 443 ssl;
-          server_name portainer.tutkowski.com;
-          ssl_certificate /etc/nginx/certs/portainer.tutkowski.com.crt;
-          ssl_certificate_key /etc/nginx/certs/portainer.tutkowski.com.key;
-          ssl_session_cache shared:SSL:10m;
-          ssl_session_timeout 10m;
-          location / {
               proxy_pass http://192.168.11:9000;
               proxy_http_version 1.1;
               proxy_set_header Upgrade $$http_upgrade;
@@ -372,18 +322,7 @@ configs:
       server {
           listen 80;
           server_name grafana.tutkowski.com;
-          location / {
-              return 301 https://$$host$$request_uri;
-          }
-      }
 
-      server {
-          listen 443 ssl;
-          server_name grafana.tutkowski.com;
-          ssl_certificate /etc/nginx/certs/grafana.tutkowski.com.crt;
-          ssl_certificate_key /etc/nginx/certs/grafana.tutkowski.com.key;
-          ssl_session_cache shared:SSL:10m;
-          ssl_session_timeout 10m;
           location /api/live/ {
               proxy_http_version 1.1;
               proxy_set_header Upgrade $$http_upgrade;
@@ -409,18 +348,6 @@ configs:
           listen 80;
           server_name pihole.tutkowski.com;
           location / {
-              return 301 https://$$host$$request_uri;
-          }
-      }
-
-      server {
-          listen 443 ssl;
-          server_name pihole.tutkowski.com;
-          ssl_certificate /etc/nginx/certs/pihole.tutkowski.com.crt;
-          ssl_certificate_key /etc/nginx/certs/pihole.tutkowski.com.key;
-          ssl_session_cache shared:SSL:10m;
-          ssl_session_timeout 10m;
-          location / {
               proxy_pass http://pihole:80;
               proxy_set_header Host $$host;
           }
@@ -431,31 +358,3 @@ volumes:
   grafana_data:
   loki_data:
   tempo_data:
-  nginx_certs:
-      server {
-          listen 80;
-          server_name ca.tutkowski.com;
-          location = /local-ca.crt {
-              alias /etc/nginx/certs/local-ca.crt;
-              add_header Content-Type application/x-x509-ca-cert;
-          }
-          location / {
-              return 301 https://$$host$$request_uri;
-          }
-      }
-
-      server {
-          listen 443 ssl;
-          server_name ca.tutkowski.com;
-          ssl_certificate /etc/nginx/certs/ca.tutkowski.com.crt;
-          ssl_certificate_key /etc/nginx/certs/ca.tutkowski.com.key;
-          ssl_session_cache shared:SSL:10m;
-          ssl_session_timeout 10m;
-          location = /local-ca.crt {
-              alias /etc/nginx/certs/local-ca.crt;
-              add_header Content-Type application/x-x509-ca-cert;
-          }
-          location / {
-              return 404;
-          }
-      }
