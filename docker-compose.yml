@@ -1,7 +1,8 @@
 services:
   airconnect:
     image: web2brain/airconnect:latest
-    # network_mode: host
+    container_name: AirConnect
+    network_mode: host
     restart: unless-stopped
 
   dns_updater:
