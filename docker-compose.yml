@@ -1,6 +1,6 @@
 services:
   airconnect:
-    image: web2brain/airconnect:latest
+    image: 1activegeek/airconnect:1.8.3
     container_name: AirConnect
     network_mode: host
     restart: unless-stopped
