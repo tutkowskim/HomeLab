@@ -1,4 +1,9 @@
 services:
+  airconnect:
+    image: web2brain/airconnect:1.9.3
+    # network_mode: host
+    restart: unless-stopped
+
   dns_updater:
     image: tutkowskim/dns-updater:2026.01.11.0127
     container_name: DnsUpdater
