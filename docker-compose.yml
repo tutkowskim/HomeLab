@@ -1,6 +1,6 @@
 services:
   airconnect:
-    image: web2brain/airconnect:1.9.3
+    image: web2brain/airconnect:latest
     # network_mode: host
     restart: unless-stopped
 
