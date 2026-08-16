@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   the_voice:
-    image: tutkowskim/the-voice:2026.01.11.0126
+    image: tutkowskim/the-voice:2026.08.16.1925
     container_name: TheVoice
     environment:
       - SENTRY_DSN=${THE_VOICE_SENTRY_DSN}
