@@ -28,6 +28,37 @@ services:
       - OPENAI_MODEL=gpt-5.2
     restart: unless-stopped
 
+  pi_assistant_backend:
+    image: tutkowskim/pi-assistant-backend:latest
+    container_name: PiAssistantBackend
+    environment:
+      - OPENAI_API_KEY=${PI_ASSISTANT_OPENAI_API_KEY}
+      - GEMINI_API_KEY=${PI_ASSISTANT_GEMINI_API_KEY}
+      - GEMINI_BASE_URL=${PI_ASSISTANT_GEMINI_BASE_URL}
+      - OLLAMA_BASE_URL=${PI_ASSISTANT_OLLAMA_BASE_URL}
+      - APP_DATA_DIR=/app/data
+      - DATABASE_URL=sqlite:////app/data/pi-assistant.db
+      - APP_TIMEZONE=${PI_ASSISTANT_TIMEZONE:-America/Los_Angeles}
+      - MODEL_DISCOVERY_ENABLED=true
+      - MODEL_REFRESH_SECONDS=${PI_ASSISTANT_MODEL_REFRESH_SECONDS:-15}
+      - MCP_SERVERS=${PI_ASSISTANT_MCP_SERVERS:-[]}
+      - DEFAULT_MODEL_ID=${PI_ASSISTANT_DEFAULT_MODEL_ID:-}
+    volumes:
+      - pi_assistant_data:/app/data
+    networks:
+      default:
+        aliases:
+          - backend
+    restart: unless-stopped
+
+  pi_assistant_frontend:
+    image: tutkowskim/pi-assistant-frontend:latest
+    container_name: PiAssistantFrontend
+    depends_on:
+      pi_assistant_backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -65,3 +96,20 @@ configs:
               proxy_set_header Host $$host;
           }
       }
+      server {
+          listen 80;
+          server_name pi-assistant.tutkowski.com;
+          location / {
+              proxy_pass http://pi_assistant_frontend:80;
+              proxy_http_version 1.1;
+              proxy_set_header Host $$host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_buffering off;
+              proxy_read_timeout 3600s;
+          }
+      }
+
+volumes:
+  pi_assistant_data:

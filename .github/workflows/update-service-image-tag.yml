@@ -2,7 +2,14 @@ name: Update Service Image Tag
 
 on:
   repository_dispatch:
-    types: [update-docker-tag]
+    types: [update-docker-tag, update-docker-tags]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-service-image-tags
+  cancel-in-progress: false
 
 jobs:
   update-yaml:
@@ -10,24 +17,60 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - name: Update image tag in docker-compose.yml
+      - name: Update image tags in docker-compose.yml
+        shell: bash
         run: |
+          set -euo pipefail
           FILE=docker-compose.yml
-          IMAGE_NAME="${{ github.event.client_payload.image_name }}"
-          NEW_TAG="${{ github.event.client_payload.new_tag }}"
 
-          # Extract base name without tag (if needed)
-          BASE_NAME=$(echo "$IMAGE_NAME" | cut -d: -f1)
+          if [[ "${{ github.event.action }}" == "update-docker-tags" ]]; then
+            NEW_TAG="$(jq -r '.client_payload.tag' "$GITHUB_EVENT_PATH")"
+            mapfile -t IMAGES < <(jq -r '.client_payload.images[]' "$GITHUB_EVENT_PATH")
+          else
+            NEW_TAG="$(jq -r '.client_payload.new_tag' "$GITHUB_EVENT_PATH")"
+            IMAGES=("$(jq -r '.client_payload.image_name' "$GITHUB_EVENT_PATH")")
+          fi
 
-          # Replace the line that starts with image: and set it to the new tag
-          sed -i "s|^\([[:space:]]*image:[[:space:]]*\)${BASE_NAME}:[^[:space:]]*|\1${BASE_NAME}:${NEW_TAG}|" "$FILE"
+          if [[ ! "$NEW_TAG" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{4}$ ]]; then
+            echo "Invalid image tag: $NEW_TAG" >&2
+            exit 1
+          fi
+          if [[ ${#IMAGES[@]} -eq 0 ]]; then
+            echo "No images supplied" >&2
+            exit 1
+          fi
+
+          for IMAGE_NAME in "${IMAGES[@]}"; do
+            if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9._/-]+$ ]]; then
+              echo "Invalid image name: $IMAGE_NAME" >&2
+              exit 1
+            fi
+            if ! grep -Eq "^[[:space:]]*image:[[:space:]]*${IMAGE_NAME}:" "$FILE"; then
+              echo "Image not found in $FILE: $IMAGE_NAME" >&2
+              exit 1
+            fi
+            sed -i "s|^\([[:space:]]*image:[[:space:]]*\)${IMAGE_NAME}:[^[:space:]]*|\1${IMAGE_NAME}:${NEW_TAG}|" "$FILE"
+          done
+
+          UPDATED_IMAGES="$(IFS=,; echo "${IMAGES[*]}")"
+          echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+          echo "UPDATED_IMAGES=$UPDATED_IMAGES" >> "$GITHUB_ENV"
 
       - name: Commit and push changes
+        shell: bash
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          set -euo pipefail
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
           git add docker-compose.yml
-          git commit -m "Update ${SERVICE_NAME} image tag to ${{ github.event.client_payload.new_tag }}"
+          if git diff --cached --quiet; then
+            echo "Image tags are already current"
+            exit 0
+          fi
+          git commit -m "Update ${UPDATED_IMAGES} image tag to ${NEW_TAG}"
+          git pull --rebase origin main
           git push
