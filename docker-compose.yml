@@ -34,7 +34,7 @@ services:
     restart: "no"
 
   pi_assistant_backend:
-    image: tutkowskim/pi-assistant-backend:latest
+    image: tutkowskim/pi-assistant-backend:2026.08.16.2011
     container_name: PiAssistantBackend
     environment:
       - OPENAI_API_KEY=${PI_ASSISTANT_OPENAI_API_KEY}
@@ -65,7 +65,7 @@ services:
     restart: unless-stopped
 
   pi_assistant_frontend:
-    image: tutkowskim/pi-assistant-frontend:latest
+    image: tutkowskim/pi-assistant-frontend:2026.08.16.2011
     container_name: PiAssistantFrontend
     depends_on:
       pi_assistant_backend:
