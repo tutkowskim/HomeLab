@@ -28,6 +28,11 @@ services:
       - OPENAI_MODEL=gpt-5.2
     restart: unless-stopped
 
+  pi_assistant_python_sandbox_image:
+    image: python:3.12-alpine
+    command: ["true"]
+    restart: "no"
+
   pi_assistant_backend:
     image: tutkowskim/pi-assistant-backend:latest
     container_name: PiAssistantBackend
@@ -43,8 +48,16 @@ services:
       - MODEL_REFRESH_SECONDS=${PI_ASSISTANT_MODEL_REFRESH_SECONDS:-15}
       - MCP_SERVERS=${PI_ASSISTANT_MCP_SERVERS:-[]}
       - DEFAULT_MODEL_ID=${PI_ASSISTANT_DEFAULT_MODEL_ID:-}
+      - PYTHON_SANDBOX_IMAGE=python:3.12-alpine
+    depends_on:
+      pi_assistant_python_sandbox_image:
+        condition: service_completed_successfully
+    # On the Docker host: stat -c '%g' /var/run/docker.sock
+    group_add:
+      - "${PI_ASSISTANT_DOCKER_GID:-999}"
     volumes:
       - pi_assistant_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       default:
         aliases:
