@@ -28,6 +28,64 @@ services:
       - OPENAI_MODEL=gpt-5.2
     restart: unless-stopped
 
+  discord_mcp_server:
+    image: tutkowskim/discord-mcp-server:latest
+    container_name: DiscordMcpServer
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_MCP_BOT_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_MCP_GUILD_ID}
+      - DISCORD_ALLOWED_CHANNEL_IDS=*
+      - DISCORD_CACHE_ENABLED=true
+      - REDIS_URL=redis://discord_mcp_redis:6379/0
+      - REDIS_PASSWORD=${DISCORD_MCP_REDIS_PASSWORD}
+      - CONTROL_PLANE_API_KEY=${DISCORD_MCP_CONTROL_PLANE_API_KEY}
+      - CONTROL_PLANE_TUNNEL_ID=${DISCORD_MCP_CONTROL_PLANE_TUNNEL_ID}
+      - MCP_COMMAND=python -m discord_mcp_server
+      - HEALTH_LISTEN_ADDR=:8080
+      - LOG_FORMAT=json
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - discord_mcp_redis
+    restart: unless-stopped
+
+  discord_mcp_redis:
+    image: redis:8.2-alpine@sha256:a7859ed111db3c1f5404a973a4747505d559fb5ca32d37e447afc0ef845a2103
+    container_name: DiscordMcpRedis
+    command:
+      - redis-server
+      - --requirepass
+      - ${DISCORD_MCP_REDIS_PASSWORD}
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - allkeys-lru
+    environment:
+      - REDIS_PASSWORD=${DISCORD_MCP_REDIS_PASSWORD}
+    user: "999:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    tmpfs:
+      - /data:size=128m,uid=999,gid=1000,mode=0700
+    restart: unless-stopped
+
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
