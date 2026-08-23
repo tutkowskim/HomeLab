@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   discord_mcp_server:
-    image: tutkowskim/discord-mcp-server:2026.08.18.0328
+    image: tutkowskim/discord-mcp-server:2026.08.23.0501
     container_name: DiscordMcpServer
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_MCP_BOT_TOKEN}
