@@ -49,6 +49,34 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
 
+  kasa_mcp_server:
+    image: tutkowskim/kasa-mcp-server:latest
+    container_name: KasaMcpServer
+    network_mode: host
+    environment:
+      - KASA_USERNAME=${KASA_MCP_USERNAME}
+      - KASA_PASSWORD=${KASA_MCP_PASSWORD}
+      - KASA_DEVICE_HOSTS=${KASA_MCP_DEVICE_HOSTS}
+      - KASA_DISCOVERY_TARGET=${KASA_MCP_DISCOVERY_TARGET:-255.255.255.255}
+      - KASA_ALLOWED_DEVICE_IDS=${KASA_MCP_ALLOWED_DEVICE_IDS}
+      - KASA_DISCOVERY_TIMEOUT_SECONDS=5
+      - KASA_REQUEST_TIMEOUT_SECONDS=10
+      - KASA_MAX_CONCURRENT_REQUESTS=4
+      - KASA_CACHE_TTL_SECONDS=60
+      - CONTROL_PLANE_API_KEY=${KASA_MCP_CONTROL_PLANE_API_KEY}
+      - CONTROL_PLANE_TUNNEL_ID=${KASA_MCP_CONTROL_PLANE_TUNNEL_ID}
+      - MCP_COMMAND=python -m kasa_mcp_server
+      - HEALTH_LISTEN_ADDR=127.0.0.1:8081
+      - LOG_FORMAT=json
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
