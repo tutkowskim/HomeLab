@@ -92,7 +92,7 @@ services:
     restart: unless-stopped
 
   kasa_mcp_server:
-    image: tutkowskim/kasa-mcp-server:2026.08.24.0210
+    image: tutkowskim/kasa-mcp-server:2026.08.24.0230
     container_name: KasaMcpServer
     network_mode: host
     environment:
