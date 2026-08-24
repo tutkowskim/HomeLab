@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   discord_mcp_server:
-    image: tutkowskim/discord-mcp-server:2026.08.24.0141
+    image: tutkowskim/discord-mcp-server:2026.08.24.0211
     container_name: DiscordMcpServer
     entrypoint: ["python", "-m", "discord_mcp_server"]
     environment:
@@ -59,7 +59,7 @@ services:
     restart: unless-stopped
 
   discord_mcp_tunnel:
-    image: tutkowskim/discord-mcp-server:2026.08.24.0141
+    image: tutkowskim/discord-mcp-server:2026.08.24.0211
     container_name: DiscordMcpTunnel
     environment:
       - CONTROL_PLANE_API_KEY=${DISCORD_MCP_CONTROL_PLANE_API_KEY}
