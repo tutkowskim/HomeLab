@@ -31,7 +31,6 @@ services:
   discord_mcp_server:
     image: tutkowskim/discord-mcp-server:2026.08.24.0211
     container_name: DiscordMcpServer
-    entrypoint: ["python", "-m", "discord_mcp_server"]
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_MCP_BOT_TOKEN}
       - DISCORD_GUILD_ID=${DISCORD_MCP_GUILD_ID}
@@ -59,9 +58,12 @@ services:
     restart: unless-stopped
 
   discord_mcp_tunnel:
-    image: tutkowskim/discord-mcp-server:2026.08.24.0211
+    image: ghcr.io/openai/tunnel-client:latest@sha256:b1e9eb675e6a64775685c323c2af8c2810ea14e1a27c8ce4c68f2994cd7c5e8e
     container_name: DiscordMcpTunnel
+    user: "10001:10001"
     environment:
+      - HOME=/tmp
+      - XDG_CONFIG_HOME=/tmp/tunnel-client
       - CONTROL_PLANE_API_KEY=${DISCORD_MCP_CONTROL_PLANE_API_KEY}
       - CONTROL_PLANE_TUNNEL_ID=${DISCORD_MCP_CONTROL_PLANE_TUNNEL_ID}
       - MCP_SERVER_URL=http://discord_mcp_server:8000/mcp
@@ -74,6 +76,12 @@ services:
         condition: service_healthy
     networks:
       - discord_mcp
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -86,7 +94,6 @@ services:
   kasa_mcp_server:
     image: tutkowskim/kasa-mcp-server:2026.08.24.0210
     container_name: KasaMcpServer
-    entrypoint: ["python", "-m", "kasa_mcp_server"]
     network_mode: host
     environment:
       - KASA_USERNAME=${KASA_MCP_USERNAME}
@@ -119,10 +126,13 @@ services:
     restart: unless-stopped
 
   kasa_mcp_tunnel:
-    image: tutkowskim/kasa-mcp-server:2026.08.24.0210
+    image: ghcr.io/openai/tunnel-client:latest@sha256:b1e9eb675e6a64775685c323c2af8c2810ea14e1a27c8ce4c68f2994cd7c5e8e
     container_name: KasaMcpTunnel
+    user: "10001:10001"
     network_mode: host
     environment:
+      - HOME=/tmp
+      - XDG_CONFIG_HOME=/tmp/tunnel-client
       - CONTROL_PLANE_API_KEY=${KASA_MCP_CONTROL_PLANE_API_KEY}
       - CONTROL_PLANE_TUNNEL_ID=${KASA_MCP_CONTROL_PLANE_TUNNEL_ID}
       - MCP_SERVER_URL=http://127.0.0.1:8001/mcp
@@ -133,6 +143,12 @@ services:
     depends_on:
       kasa_mcp_server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
