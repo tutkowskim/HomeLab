@@ -84,7 +84,7 @@ services:
     restart: unless-stopped
 
   kasa_mcp_server:
-    image: tutkowskim/kasa-mcp-server:2026.08.24.0135
+    image: tutkowskim/kasa-mcp-server:2026.08.24.0210
     container_name: KasaMcpServer
     entrypoint: ["python", "-m", "kasa_mcp_server"]
     network_mode: host
@@ -119,7 +119,7 @@ services:
     restart: unless-stopped
 
   kasa_mcp_tunnel:
-    image: tutkowskim/kasa-mcp-server:2026.08.24.0135
+    image: tutkowskim/kasa-mcp-server:2026.08.24.0210
     container_name: KasaMcpTunnel
     network_mode: host
     environment:
