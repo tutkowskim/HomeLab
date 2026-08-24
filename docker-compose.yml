@@ -31,15 +31,49 @@ services:
   discord_mcp_server:
     image: tutkowskim/discord-mcp-server:2026.08.24.0141
     container_name: DiscordMcpServer
+    entrypoint: ["python", "-m", "discord_mcp_server"]
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_MCP_BOT_TOKEN}
       - DISCORD_GUILD_ID=${DISCORD_MCP_GUILD_ID}
       - DISCORD_ALLOWED_CHANNEL_IDS=*
+      - DISCORD_MCP_HOST=0.0.0.0
+      - DISCORD_MCP_PORT=8000
+      - DISCORD_MCP_ALLOWED_HOSTS=discord_mcp_server:8000,127.0.0.1:8000,localhost:8000
+      - DISCORD_MCP_MAX_REQUEST_BODY_BYTES=12582912
+      - DISCORD_MCP_LOG_LEVEL=DEBUG
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    networks:
+      - discord_mcp
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  discord_mcp_tunnel:
+    image: tutkowskim/discord-mcp-server:2026.08.24.0141
+    container_name: DiscordMcpTunnel
+    environment:
       - CONTROL_PLANE_API_KEY=${DISCORD_MCP_CONTROL_PLANE_API_KEY}
       - CONTROL_PLANE_TUNNEL_ID=${DISCORD_MCP_CONTROL_PLANE_TUNNEL_ID}
-      - MCP_COMMAND=python -m discord_mcp_server
+      - MCP_SERVER_URL=http://discord_mcp_server:8000/mcp
+      - MCP_MAX_CONCURRENT_REQUESTS=4
       - HEALTH_LISTEN_ADDR=:8080
+      - LOG_LEVEL=debug
       - LOG_FORMAT=json
+    depends_on:
+      discord_mcp_server:
+        condition: service_healthy
+    networks:
+      - discord_mcp
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -52,6 +86,7 @@ services:
   kasa_mcp_server:
     image: tutkowskim/kasa-mcp-server:2026.08.24.0135
     container_name: KasaMcpServer
+    entrypoint: ["python", "-m", "kasa_mcp_server"]
     network_mode: host
     environment:
       - KASA_USERNAME=${KASA_MCP_USERNAME}
@@ -63,11 +98,41 @@ services:
       - KASA_REQUEST_TIMEOUT_SECONDS=10
       - KASA_MAX_CONCURRENT_REQUESTS=4
       - KASA_CACHE_TTL_SECONDS=60
+      - KASA_MCP_HOST=127.0.0.1
+      - KASA_MCP_PORT=8001
+      - KASA_MCP_ALLOWED_HOSTS=127.0.0.1:8001
+      - KASA_MCP_MAX_REQUEST_BODY_BYTES=4194304
+      - KASA_MCP_LOG_LEVEL=DEBUG
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  kasa_mcp_tunnel:
+    image: tutkowskim/kasa-mcp-server:2026.08.24.0135
+    container_name: KasaMcpTunnel
+    network_mode: host
+    environment:
       - CONTROL_PLANE_API_KEY=${KASA_MCP_CONTROL_PLANE_API_KEY}
       - CONTROL_PLANE_TUNNEL_ID=${KASA_MCP_CONTROL_PLANE_TUNNEL_ID}
-      - MCP_COMMAND=python -m kasa_mcp_server
+      - MCP_SERVER_URL=http://127.0.0.1:8001/mcp
+      - MCP_MAX_CONCURRENT_REQUESTS=4
       - HEALTH_LISTEN_ADDR=127.0.0.1:8081
+      - LOG_LEVEL=debug
       - LOG_FORMAT=json
+    depends_on:
+      kasa_mcp_server:
+        condition: service_healthy
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -103,6 +168,7 @@ configs:
               proxy_set_header Host $$host;
           }
       }
+
       server {
           listen 80;
           server_name olamma.tutkowski.com;
@@ -114,3 +180,7 @@ configs:
               proxy_set_header Host $$host;
           }
       }
+
+networks:
+  discord_mcp:
+    driver: bridge
