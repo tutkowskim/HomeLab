@@ -40,6 +40,9 @@ services:
       - DISCORD_MCP_ALLOWED_HOSTS=discord_mcp_server:8000,127.0.0.1:8000,localhost:8000
       - DISCORD_MCP_MAX_REQUEST_BODY_BYTES=12582912
       - DISCORD_MCP_LOG_LEVEL=DEBUG
+      - SENTRY_DSN=${DISCORD_MCP_SENTRY_DSN}
+      - SENTRY_ENVIRONMENT=${DISCORD_MCP_SENTRY_ENVIRONMENT:-production}
+      - SENTRY_TRACES_SAMPLE_RATE=${DISCORD_MCP_SENTRY_TRACES_SAMPLE_RATE:-1.0}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"]
       interval: 30s
@@ -110,6 +113,9 @@ services:
       - KASA_MCP_ALLOWED_HOSTS=127.0.0.1:8001
       - KASA_MCP_MAX_REQUEST_BODY_BYTES=4194304
       - KASA_MCP_LOG_LEVEL=DEBUG
+      - SENTRY_DSN=${KASA_MCP_SENTRY_DSN}
+      - SENTRY_ENVIRONMENT=${KASA_MCP_SENTRY_ENVIRONMENT:-production}
+      - SENTRY_TRACES_SAMPLE_RATE=${KASA_MCP_SENTRY_TRACES_SAMPLE_RATE:-1.0}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3).read()"]
       interval: 30s
