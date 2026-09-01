@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
 
   dns_updater:
-    image: tutkowskim/dns-updater:2026.09.01.1551
+    image: tutkowskim/dns-updater:2026.09.01.1554
     container_name: DnsUpdater
     environment:
       - PORT=8080
