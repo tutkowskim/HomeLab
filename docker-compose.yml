@@ -100,11 +100,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     configs:
-      - source: nginx_config
+      - source: nginx_config_v2
         target: /etc/nginx/conf.d/default.conf
 
 configs:
-  nginx_config:
+  nginx_config_v2:
     file: ./nginx.conf
 
 networks:
