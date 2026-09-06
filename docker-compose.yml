@@ -12,6 +12,30 @@ services:
         condition: any
         delay: 5s
 
+  hermes_agent:
+    image: nousresearch/hermes-agent:v2026.8.31
+    command: ["gateway", "run"]
+    environment:
+      HERMES_UID: ${HERMES_UID:-1000}
+      HERMES_GID: ${HERMES_GID:-1000}
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: 0.0.0.0
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: ${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${HERMES_DASHBOARD_BASIC_AUTH_SECRET}
+    volumes:
+      - type: bind
+        source: /srv/hermes
+        target: /opt/data
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == raspberrypi4
+      restart_policy:
+        condition: any
+        delay: 5s
+
   # dns_updater:
   #   image: tutkowskim/dns-updater:2026.09.01.1554
   #   container_name: DnsUpdater
