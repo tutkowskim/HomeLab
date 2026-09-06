@@ -91,6 +91,10 @@ services:
     image: nginx:alpine
     container_name: nginx-proxy
     restart: unless-stopped
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == raspberrypi4
     ports:
       - "80:80"
     extra_hosts:
