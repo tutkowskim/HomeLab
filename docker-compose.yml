@@ -33,19 +33,6 @@ services:
         condition: any
         delay: 5s
 
-  # dns_updater:
-  #   image: tutkowskim/dns-updater:2026.09.01.1554
-  #   container_name: DnsUpdater
-  #   environment:
-  #     - PORT=8080
-  #     - SENTRY_DSN=${DNS_UPDATER_SENTRY_DSN}
-  #     - AWS_REGION=${DNS_UPDATER_AWS_REGION}
-  #     - AWS_ACCESS_KEY_ID=${DNS_UPDATER_AWS_ACCESS_KEY_ID}
-  #     - AWS_SECRET_ACCESS_KEY=${DNS_UPDATER_AWS_SECRET_ACCESS_KEY}
-  #     - HOSTED_ZONE_ID=${DNS_UPDATER_HOSTED_ZONE_ID}
-  #     - RECORD_NAME=${DNS_UPDATER_RECORD_NAME}
-  #   restart: unless-stopped
-
   kasa_mcp_server:
     image: tutkowskim/kasa-mcp-server:2026.08.30.2024
     container_name: KasaMcpServer
