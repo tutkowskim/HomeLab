@@ -26,9 +26,7 @@ services:
       HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}
       HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${HERMES_DASHBOARD_BASIC_AUTH_SECRET}
     volumes:
-      - type: bind
-        source: /srv/hermes
-        target: /opt/data
+      - hermes_data:/opt/data
     deploy:
       replicas: 1
       placement:
@@ -113,6 +111,9 @@ services:
 configs:
   nginx_config_v3:
     file: ./nginx.conf
+
+volumes:
+  hermes_data:
 
 networks:
   appnet:
