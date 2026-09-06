@@ -438,7 +438,7 @@ are stored in the `letsencrypt` volume under
 ### Enable TLS in Nginx
 
 After the certificate exists, add the following settings to each HTTPS virtual
-host in the inline `nginx_config`:
+host in `nginx.conf`:
 
 ```nginx
 listen 443 ssl;
@@ -448,14 +448,13 @@ ssl_protocols TLSv1.2 TLSv1.3;
 ```
 
 Use a separate port 80 server block to redirect HTTP to HTTPS while preserving
-the default `/healthz` endpoint. Because this Nginx configuration is embedded
-in Docker Compose, double each `$` so Compose passes it through to Nginx:
+the default `/healthz` endpoint:
 
 ```nginx
 server {
     listen 80;
     server_name portainer.tutkowski.com;
-    return 301 https://$$host$$request_uri;
+    return 301 https://$host$request_uri;
 }
 
 server {
@@ -469,9 +468,9 @@ server {
     location / {
         proxy_pass http://host.docker.internal:9000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $$host;
+        proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
     }
 }
