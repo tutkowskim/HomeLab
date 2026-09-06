@@ -109,4 +109,4 @@ configs:
 
 networks:
   discord_mcp:
-    driver: bridge
+    driver: overlay
