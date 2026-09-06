@@ -1,9 +1,16 @@
 services:
   airconnect:
     image: 1activegeek/airconnect:1.8.3
-    container_name: AirConnect
-    network_mode: host
-    restart: unless-stopped
+    networks:
+      - hostnet
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == raspberrypi4
+      restart_policy:
+        condition: any
+        delay: 5s
 
   dns_updater:
     image: tutkowskim/dns-updater:2026.09.01.1554
@@ -108,5 +115,8 @@ configs:
     file: ./nginx.conf
 
 networks:
+  hostnet:
+    external: true
+    name: host
   discord_mcp:
     driver: overlay
