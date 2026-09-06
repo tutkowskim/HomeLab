@@ -60,7 +60,8 @@ services:
   kasa_mcp_server:
     image: tutkowskim/kasa-mcp-server:2026.08.30.2024
     container_name: KasaMcpServer
-    network_mode: host
+    networks:
+      - hostnet
     environment:
       - KASA_USERNAME=${KASA_MCP_USERNAME}
       - KASA_PASSWORD=${KASA_MCP_PASSWORD}
