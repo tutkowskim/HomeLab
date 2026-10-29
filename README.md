@@ -559,3 +559,23 @@ and should not be deployed to Swarm unchanged:
 
 Migrate one non-critical service at a time and confirm its networking, storage,
 health check, and restart behavior before moving the next service.
+
+## Discord MCP server
+
+`discord_mcp_server` runs one replica on `raspberrypi3` using the shared
+`appnet` overlay network. Nginx routes `discord-mcp.tutkowski.com` to port
+8000; configure MCP clients with `http://discord-mcp.tutkowski.com/mcp`.
+The hostname must resolve to the Nginx host. This route currently uses HTTP,
+matching the other routes in `nginx.conf`.
+
+Supply `DISCORD_MCP_BOT_TOKEN` and `DISCORD_MCP_GUILD_ID` through the deployment
+environment (or Portainer stack variables). Optional
+`DISCORD_MCP_ALLOWED_CHANNEL_IDS` defaults to `*` for all message-capable
+channels in the configured guild; set comma-separated channel IDs to restrict
+access. Optional Sentry settings are `DISCORD_MCP_SENTRY_DSN`,
+`DISCORD_MCP_SENTRY_ENVIRONMENT` (default `production`), and
+`DISCORD_MCP_SENTRY_TRACES_SAMPLE_RATE` (default `1.0`). Do not commit tokens.
+
+The service exposes `/healthz` internally for its container health check.
+Redeploy the stack after supplying the variables to apply the service and
+the updated `nginx_config_v5` configuration.
