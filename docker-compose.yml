@@ -131,6 +131,25 @@ services:
         condition: any
         delay: 5s
 
+  golink:
+    image: ghcr.io/tailscale/golink:main
+    environment:
+      # Supply through Portainer for initial enrollment, then remove the key.
+      TS_AUTHKEY: ${GOLINK_TS_AUTHKEY:-}
+    volumes:
+      - golink_data:/home/nonroot
+    networks:
+      - appnet
+    # golink joins the tailnet itself as "go"; no host ports are needed.
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == raspberrypi4
+      restart_policy:
+        condition: any
+        delay: 5s
+
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -158,6 +177,7 @@ configs:
 
 volumes:
   hermes_data:
+  golink_data:
 
 networks:
   appnet:

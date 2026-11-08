@@ -3,6 +3,32 @@
 Docker services for the home lab, managed with Portainer on a two-node Docker
 Swarm.
 
+## Tailnet go links
+
+The `golink` service runs on `raspberrypi4` and joins Tailscale as a separate
+device named `go`. It needs no published host ports. The `golink_data` volume
+stores both its enrollment state and link database; preserve and back up it.
+
+For initial enrollment, generate a non-ephemeral Tailscale auth key tagged
+`tag:homelab`. Set `GOLINK_TS_AUTHKEY` in the Portainer stack environment and
+redeploy from the updated Compose file. Never commit the key. Once `go` appears
+online, remove the environment variable and redeploy; enrollment persists in
+the volume. Approve the device if your tailnet requires device approval.
+
+With MagicDNS enabled, open `http://go/` from a connected client and create:
+
+| Link | Destination |
+| --- | --- |
+| `hermes` | `https://hermes.dachshund-octatonic.ts.net` |
+| `portainer` | `https://portainer.dachshund-octatonic.ts.net` |
+| `kasa` | `https://kasa-mcp.dachshund-octatonic.ts.net/mcp` |
+| `discord` | `https://discord-mcp.dachshund-octatonic.ts.net/mcp` |
+
+Use the full MCP destination URLs in MCP clients. MCP endpoints are protocol
+endpoints, not browser dashboards.
+
+See the [official golink documentation](https://github.com/tailscale/golink).
+
 ## Proposed topology
 
 | Host | Role | IP address |
