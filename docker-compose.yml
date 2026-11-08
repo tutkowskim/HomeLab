@@ -28,6 +28,11 @@ services:
       HERMES_DASHBOARD_BASIC_AUTH_USERNAME: ${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}
       HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}
       HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${HERMES_DASHBOARD_BASIC_AUTH_SECRET}
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "8642"
+      API_SERVER_MODEL_NAME: hermes-agent
+      API_SERVER_KEY: ${HERMES_API_SERVER_KEY:?Set HERMES_API_SERVER_KEY in Portainer}
     volumes:
       - hermes_data:/opt/data
     deploy:
@@ -131,6 +136,64 @@ services:
         condition: any
         delay: 5s
 
+  pihole:
+    image: pihole/pihole:2026.10.1
+    networks:
+      - hostnet
+    environment:
+      TZ: America/Los_Angeles
+      FTLCONF_webserver_api_password: ${PIHOLE_WEB_PASSWORD:?Set PIHOLE_WEB_PASSWORD in Portainer}
+      FTLCONF_webserver_port: "9080"
+      FTLCONF_dns_listeningMode: "ALL"
+      FTLCONF_dns_upstreams: ${PIHOLE_DNS_UPSTREAMS:-1.1.1.1;1.0.0.1}
+      # Keep the router responsible for DHCP and the host for timekeeping.
+      FTLCONF_dhcp_active: "false"
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+      FTLCONF_ntp_sync_active: "false"
+    volumes:
+      - pihole_data:/etc/pihole
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == raspberrypi4
+      update_config:
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  open_webui:
+    image: ghcr.io/open-webui/open-webui:main-slim
+    networks:
+      - appnet
+    ports:
+      - target: 8080
+        published: 9081
+        protocol: tcp
+        mode: host
+    environment:
+      WEBUI_URL: https://chat.dachshund-octatonic.ts.net
+      WEBUI_SECRET_KEY: ${OPEN_WEBUI_SECRET_KEY:?Set OPEN_WEBUI_SECRET_KEY in Portainer}
+      WEBUI_AUTH: "true"
+      ENABLE_OLLAMA_API: "false"
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URL: http://hermes_agent:8642/v1
+      OPENAI_API_KEY: ${HERMES_API_SERVER_KEY:?Set HERMES_API_SERVER_KEY in Portainer}
+    volumes:
+      - open_webui_data:/app/backend/data
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == raspberrypi4
+      update_config:
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 5s
+
   golink:
     image: ghcr.io/tailscale/golink:main
     environment:
@@ -153,6 +216,8 @@ services:
 volumes:
   hermes_data:
   golink_data:
+  pihole_data:
+  open_webui_data:
 
 networks:
   appnet:

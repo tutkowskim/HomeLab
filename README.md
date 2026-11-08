@@ -16,7 +16,7 @@ and the `appnet` overlay network. Tailscale does not replace Swarm networking.
 
 | Host | Role | Reserved LAN IP | Tailscale IP |
 | --- | --- | --- | --- |
-| `raspberrypi4` | Swarm manager; Hermes, Portainer, golink | `192.168.86.49` | `100.93.9.106` |
+| `raspberrypi4` | Swarm manager; Hermes, Portainer, golink, Pi-hole, Open WebUI | `192.168.86.49` | `100.93.9.106` |
 | `raspberrypi3` | Swarm worker; Kasa MCP, Discord MCP | `192.168.86.80` | `100.121.14.84` |
 
 Use DHCP reservations to retain the LAN addresses. Keep the Pi 4 as the only
@@ -29,12 +29,15 @@ flowchart TB
     client["Mac / Windows / iPhone / iPad<br/>Connected to Tailscale"]
 
     subgraph tailnet["Tailnet: dachshund-octatonic.ts.net"]
-        endpoints["Named HTTPS Services on TCP 443<br/>hermes / portainer / kasa-mcp / discord-mcp"]
+        endpoints["Named HTTPS Services on TCP 443<br/>hermes / portainer / kasa-mcp / discord-mcp / pihole / chat"]
 
         subgraph pi4["raspberrypi4 - Swarm manager<br/>LAN 192.168.86.49 | Tailscale 100.93.9.106"]
             swarm4["Docker Swarm manager"]
-            serve4["Tailscale Serve<br/>hermes + portainer"]
+            serve4["Tailscale Serve<br/>hermes + portainer + pihole + chat"]
             hermes["Hermes<br/>host 9119 to container 9119"]
+            pihole["Pi-hole - host network<br/>DNS TCP/UDP 53 | admin HTTP 9080"]
+            chat["Open WebUI - chat<br/>host 9081 to container 8080"]
+            hermesapi["Hermes OpenAI-compatible API<br/>appnet only: hermes_agent:8642/v1"]
             portainer["Portainer - separate stack<br/>host 9000 to container 9000"]
             go["golink - separate tailnet device: go<br/>No published host ports"]
             data[("golink_data<br/>Enrollment state + link database")]
@@ -49,10 +52,16 @@ flowchart TB
     end
 
     client -->|"HTTPS"| endpoints
-    endpoints -->|"hermes / portainer"| serve4
+    endpoints -->|"hermes / portainer / pihole / chat"| serve4
     endpoints -->|"kasa-mcp / discord-mcp"| serve3
     serve4 -->|"HTTP 127.0.0.1:9119"| hermes
     serve4 -->|"HTTP 127.0.0.1:9000"| portainer
+    serve4 -->|"HTTP 127.0.0.1:9080"| pihole
+    serve4 -->|"HTTP 127.0.0.1:9081"| chat
+    chat -->|"Bearer-authenticated API over appnet"| hermesapi
+    hermesapi --- hermes
+    lanclients["LAN devices using Pi-hole DNS"] -->|"TCP/UDP 53 to 192.168.86.49"| pihole
+    pihole -->|"DNS"| upstream["Configured upstream DNS resolvers"]
     serve3 -->|"HTTP 127.0.0.1:8001"| kasa
     serve3 -->|"HTTP 127.0.0.1:8002"| discord
     client -->|"http://go/hermes and other shortcuts"| go
@@ -71,6 +80,8 @@ traffic after the redirect.
 | --- | --- | --- | --- |
 | `svc:hermes` | `https://hermes.dachshund-octatonic.ts.net` | Pi 4 | `127.0.0.1:9119` |
 | `svc:portainer` | `https://portainer.dachshund-octatonic.ts.net` | Pi 4 | `127.0.0.1:9000` |
+| `svc:pihole` | `https://pihole.dachshund-octatonic.ts.net/admin/` | Pi 4 | `127.0.0.1:9080` |
+| `svc:chat` | `https://chat.dachshund-octatonic.ts.net` | Pi 4 | `127.0.0.1:9081` |
 | `svc:kasa-mcp` | `https://kasa-mcp.dachshund-octatonic.ts.net/mcp` | Pi 3 | `127.0.0.1:8001` |
 | `svc:discord-mcp` | `https://discord-mcp.dachshund-octatonic.ts.net/mcp` | Pi 3 | `127.0.0.1:8002` |
 
@@ -86,8 +97,8 @@ The separate Portainer stack currently publishes ports `8000`, `9000`, and
 `9443` through Swarm ingress. Its Tailscale route uses HTTP port `9000`.
 Both MCP allowlists include their tailnet names and local backend addresses.
 
-The `appnet` overlay connects Hermes, Discord, and golink.
-Kasa and AirConnect use the external Docker `host` network for LAN access.
+The `appnet` overlay connects Hermes, Discord, golink, and Open WebUI.
+Kasa, AirConnect, and Pi-hole use the external Docker `host` network for LAN access.
 AirConnect has no placement constraint in the current Compose file.
 
 ### Tailnet go links
@@ -114,6 +125,8 @@ With MagicDNS enabled, open `http://go/` from a connected client and create:
 | --- | --- |
 | `http://go/hermes` | `https://hermes.dachshund-octatonic.ts.net` |
 | `http://go/portainer` | `https://portainer.dachshund-octatonic.ts.net` |
+| `http://go/pihole` | `https://pihole.dachshund-octatonic.ts.net/admin/` |
+| `http://go/chat` | `https://chat.dachshund-octatonic.ts.net` |
 | `http://go/kasa` | `https://kasa-mcp.dachshund-octatonic.ts.net/mcp` |
 | `http://go/discord` | `https://discord-mcp.dachshund-octatonic.ts.net/mcp` |
 
@@ -420,7 +433,8 @@ Join the same tailnet as the client devices. In the Tailscale admin console:
 1. Enable MagicDNS and HTTPS certificates under DNS settings.
 2. Define `tag:homelab` with `autogroup:admin` as its owner and assign it to both
    Pis. Merge this into the existing access policy rather than replacing it.
-3. Define Services named `hermes`, `portainer`, `kasa-mcp`, and `discord-mcp`, each
+3. Define Services named `hermes`, `portainer`, `kasa-mcp`, `discord-mcp`,
+   `pihole`, and `chat`, each
    with endpoint `tcp:443`. Allow the intended clients in the tailnet policy.
 4. Deploy the current `homelab` Compose definition through Portainer before
    configuring the routes below. This applies host ports and MCP allowlists.
@@ -430,6 +444,8 @@ Run on the Pi 4:
 ```bash
 sudo tailscale serve --service=svc:hermes --https=443 http://127.0.0.1:9119
 sudo tailscale serve --service=svc:portainer --https=443 http://127.0.0.1:9000
+sudo tailscale serve --service=svc:pihole --https=443 http://127.0.0.1:9080
+sudo tailscale serve --service=svc:chat --https=443 http://127.0.0.1:9081
 ```
 
 Run on the Pi 3:
@@ -472,8 +488,111 @@ docker stack services homelab
 docker service ls --format 'table {{.Name}}\t{{.Ports}}'
 ```
 
-The `homelab` stack contains AirConnect, Hermes, Discord MCP, Kasa MCP, and
-golink. Portainer runs in its separate stack.
+The `homelab` stack defines AirConnect, Hermes, Discord MCP, Kasa MCP,
+golink, Pi-hole, and Open WebUI. Portainer runs in its separate stack.
+
+## Pi-hole and Open WebUI setup
+
+These additions run one replica each on the Pi 4. Before deploying, verify
+64-bit ARM support, available memory/storage, and port availability on that Pi:
+
+```bash
+dpkg --print-architecture
+free -h
+df -h /var/lib/docker
+sudo ss -lntup '( sport = :53 or sport = :9080 or sport = :9081 )'
+```
+
+Use `arm64`. Resolve any existing listeners before deploying; do not disable
+system DNS services without identifying what owns port `53`.
+
+In Portainer's `homelab` stack environment, add these values alongside the
+existing variables:
+
+| Variable | Value |
+| --- | --- |
+| `PIHOLE_WEB_PASSWORD` | Strong password for the Pi-hole admin UI |
+| `OPEN_WEBUI_SECRET_KEY` | Output of `openssl rand -hex 32`; retain across updates |
+| `HERMES_API_SERVER_KEY` | A separate `openssl rand -hex 32` value shared by Hermes and Open WebUI |
+| `PIHOLE_DNS_UPSTREAMS` | Optional; defaults to `1.1.1.1;1.0.0.1` |
+
+The three credentials are required by Compose interpolation. Keep them out of
+Git and chat. Deploy the updated Compose source through Portainer, then check:
+
+```bash
+docker stack services homelab
+docker service logs --tail 50 homelab_pihole
+docker service logs --tail 50 homelab_open_webui
+curl --fail --show-error --output /dev/null http://127.0.0.1:9080/admin/
+curl --fail --show-error http://127.0.0.1:9081/health
+```
+
+Create `pihole` and `chat` Services with endpoint `tcp:443`, run their Serve
+commands in section 11, and approve the Pi 4 for each. Open
+`https://pihole.dachshund-octatonic.ts.net/admin/` and
+`https://chat.dachshund-octatonic.ts.net`, then add the corresponding go links.
+
+### Pi-hole DNS
+
+Pi-hole uses host networking to serve DNS directly on the Pi 4's LAN and
+Tailscale interfaces at TCP/UDP `53`. Its web server uses HTTP port `9080`;
+Tailscale handles HTTPS for the admin UI. DHCP and NTP are disabled in Pi-hole;
+the router and host continue providing those functions. Its configuration and
+DNS databases persist in `pihole_data` mounted at `/etc/pihole`.
+
+Test DNS from a Mac before changing router or tailnet DNS settings:
+
+```bash
+dig @192.168.86.49 example.com
+dig +tcp @192.168.86.49 example.com
+```
+
+Then set the router's LAN/DHCP DNS server to `192.168.86.49` and renew client
+leases. The router continues to provide DHCP. Router IPv6 DNS advertisements
+and browser secure-DNS settings may need adjustment if they bypass Pi-hole.
+Keep DNS port `53` reachable only from trusted networks; do not forward it from
+the internet-facing router. A second public resolver advertised to clients can
+bypass filtering; this single Pi is the only filtering DNS server in this setup.
+
+For filtering on tailnet clients, first test `dig @100.93.9.106 example.com`
+from a connected client. Then optionally add `100.93.9.106` as a global
+nameserver in Tailscale DNS settings and enable Override DNS servers. Keep
+MagicDNS enabled, allow DNS TCP/UDP `53` to the Pi 4 in the tailnet policy, and
+ensure the client accepts tailnet DNS settings. The Pi-hole admin Service on
+`443` does not carry DNS traffic. Do not make Pi-hole forward upstream queries
+back to itself or to a router that forwards DNS back to Pi-hole.
+
+See [Pi-hole Docker configuration](https://docs.pi-hole.net/docker/configuration/)
+and [FTL settings](https://docs.pi-hole.net/ftldns/configfile/).
+
+### Open WebUI with Hermes
+
+Open WebUI publishes host port `9081` to container port `8080` on the Pi 4.
+Its `main-slim` image omits bundled models for a smaller installation; no
+Ollama or additional inference service is installed. Chat history, users, and
+settings persist in `open_webui_data` mounted at `/app/backend/data`.
+
+The Compose definition enables Hermes's API on container port `8642` bound to
+`0.0.0.0`. That API port is not published to the host. Open WebUI reaches
+`http://hermes_agent:8642/v1` over `appnet`, authenticating with the same
+`HERMES_API_SERVER_KEY` supplied to Hermes. This is separate from Hermes's
+dashboard on `9119`; no browser-side connection or API CORS setting is needed.
+
+Open `https://chat.dachshund-octatonic.ts.net` and create the first account,
+which becomes the administrator. In Admin Settings, verify the OpenAI-compatible
+connection URL is `http://hermes_agent:8642/v1`, with the Hermes API key. Select
+`hermes-agent` and test a chat. Hermes retains its existing model-provider and
+tool configuration. Disable further signups in Admin Settings if only your
+account should use the service. Chats submitted here can invoke Hermes tools
+with the gateway's existing permissions.
+
+Connection settings seed the initial database and can later be overridden by
+saved Admin Settings. If changing environment values after first launch, check
+the saved connection settings too. The slim image's embedding, transcription,
+and document features may require separate providers; basic Hermes chat does not.
+
+See the [Hermes integration guide](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/open-webui/)
+and [Open WebUI quick start](https://docs.openwebui.com/getting-started/quick-start/).
 
 ## Storage and migration notes
 
@@ -504,7 +623,7 @@ configured for replication. Multiple replicas sharing an ordinary directory can
 corrupt the data.
 
 The repository's `docker-compose.yml` is deployed as the `homelab` Swarm stack
-through Portainer. Placement constraints keep Hermes and golink on the Pi 4,
+through Portainer. Placement constraints keep Hermes, golink, Pi-hole, and Open WebUI on the Pi 4,
 and both MCP servers on the Pi 3. Keep these deployment details in mind:
 
 - `airconnect` and `kasa_mcp_server` use host networking for LAN discovery.
