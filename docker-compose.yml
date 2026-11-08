@@ -14,6 +14,12 @@ services:
     command: ["gateway", "run"]
     networks:
       - appnet
+    # Publish only on the Pi 4 where this service runs, for Tailscale Serve.
+    ports:
+      - target: 9119
+        published: 9119
+        protocol: tcp
+        mode: host
     environment:
       HERMES_UID: ${HERMES_UID:-1000}
       HERMES_GID: ${HERMES_GID:-1000}
@@ -41,7 +47,7 @@ services:
       - DISCORD_ALLOWED_CHANNEL_IDS=${DISCORD_MCP_ALLOWED_CHANNEL_IDS:-*}
       - DISCORD_MCP_HOST=0.0.0.0
       - DISCORD_MCP_PORT=8000
-      - DISCORD_MCP_ALLOWED_HOSTS=discord_mcp_server:8000,127.0.0.1:8000,localhost:8000,discord-mcp.tutkowski.com
+      - DISCORD_MCP_ALLOWED_HOSTS=discord_mcp_server:8000,127.0.0.1:8000,localhost:8000,127.0.0.1:8002,localhost:8002,discord-mcp.tutkowski.com,discord-mcp.dachshund-octatonic.ts.net
       - DISCORD_MCP_MAX_REQUEST_BODY_BYTES=12582912
       - DISCORD_MCP_LOG_LEVEL=DEBUG
       - SENTRY_DSN=${DISCORD_MCP_SENTRY_DSN}
@@ -55,6 +61,12 @@ services:
       retries: 3
     networks:
       - appnet
+    # Portainer already publishes port 8000; use 8002 on the Pi 3.
+    ports:
+      - target: 8000
+        published: 8002
+        protocol: tcp
+        mode: host
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -90,7 +102,7 @@ services:
       - KASA_CACHE_TTL_SECONDS=60
       - KASA_MCP_HOST=0.0.0.0
       - KASA_MCP_PORT=8001
-      - KASA_MCP_ALLOWED_HOSTS=127.0.0.1:8001,kasa-mcp.tutkowski.com
+      - KASA_MCP_ALLOWED_HOSTS=127.0.0.1:8001,kasa-mcp.tutkowski.com,kasa-mcp.dachshund-octatonic.ts.net
       - KASA_MCP_MAX_REQUEST_BODY_BYTES=4194304
       - KASA_MCP_LOG_LEVEL=DEBUG
       - SENTRY_DSN=${KASA_MCP_SENTRY_DSN}
