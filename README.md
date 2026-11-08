@@ -24,6 +24,12 @@ manager; two nodes do not provide control-plane high availability. Run
 `docker stack`, `docker service`, and `docker node` management commands on the
 Pi 4. Worker-node errors for these commands on the Pi 3 are expected.
 
+Pi-hole on the Pi 4 provides DNS filtering through two paths: Google Nest Wifi
+Pro forwards home-network DNS to `192.168.86.49`, and Tailscale clients use
+`100.93.9.106` as their global DNS server. These are two addresses for the same
+Pi. The router continues to provide DHCP, and MagicDNS handles tailnet names.
+See [Pi-hole DNS](#pi-hole-dns) for configuration and verification steps.
+
 ```mermaid
 flowchart TB
     client["Mac / Windows / iPhone / iPad<br/>Connected to Tailscale"]
@@ -60,7 +66,9 @@ flowchart TB
     serve4 -->|"HTTP 127.0.0.1:9081"| chat
     chat -->|"Bearer-authenticated API over appnet"| hermesapi
     hermesapi --- hermes
-    lanclients["LAN devices using Pi-hole DNS"] -->|"TCP/UDP 53 to 192.168.86.49"| pihole
+    lanclients["LAN devices using router DNS"] --> nest["Google Nest Wifi Pro<br/>DHCP + DNS proxy"]
+    nest -->|"TCP/UDP 53 to 192.168.86.49"| pihole
+    client -->|"Global DNS via Tailscale<br/>TCP/UDP 53 to 100.93.9.106"| pihole
     pihole -->|"DNS"| upstream["Configured upstream DNS resolvers"]
     serve3 -->|"HTTP 127.0.0.1:8001"| kasa
     serve3 -->|"HTTP 127.0.0.1:8002"| discord
@@ -540,29 +548,159 @@ Tailscale handles HTTPS for the admin UI. DHCP and NTP are disabled in Pi-hole;
 the router and host continue providing those functions. Its configuration and
 DNS databases persist in `pihole_data` mounted at `/etc/pihole`.
 
-Test DNS from a Mac before changing router or tailnet DNS settings:
+Use the address appropriate to the network:
+
+| Setting | Address | Purpose |
+| --- | --- | --- |
+| Google Nest Wifi Pro custom DNS | `192.168.86.49` | Pi 4's reserved LAN address; reachable from home |
+| Tailscale global nameserver | `100.93.9.106` | Pi 4's private Tailscale address; reachable by authorized tailnet clients at home or away |
+
+Confirm the Tailscale address on the Pi 4 with `tailscale ip -4`. DNS settings
+take an IP address, without a URL scheme or the admin UI port `9080`.
+
+#### Verify Pi-hole first
+
+Open the [LAN admin UI](http://192.168.86.49:9080/admin/) and sign in with the
+password configured in Portainer. Test DNS from a Mac on the home network:
 
 ```bash
 dig @192.168.86.49 example.com
 dig +tcp @192.168.86.49 example.com
 ```
 
-Then set the router's LAN/DHCP DNS server to `192.168.86.49` and renew client
-leases. The router continues to provide DHCP. Router IPv6 DNS advertisements
-and browser secure-DNS settings may need adjustment if they bypass Pi-hole.
+Both commands should return `NOERROR` and an answer. These direct UDP and TCP
+tests succeeded from the Mac on November 8, 2026. They verify LAN resolver
+reachability; the checks below verify the router and Tailscale DNS paths.
+
+#### Google Nest Wifi Pro
+
+1. Open **Google Home > Home > Wifi > Network settings > Advanced Networking >
+   DHCP IP reservations**. Confirm `raspberrypi4` is reserved as `192.168.86.49`.
+2. Return to **Advanced Networking > DNS**, choose **Custom**, and set the
+   primary IPv4 DNS server to `192.168.86.49`.
+3. Leave secondary IPv4 DNS blank if allowed. If the app requires a value and
+   accepts a duplicate, use `192.168.86.49` again. A second Pi-hole would provide
+   redundancy; a public secondary can bypass filtering.
+4. Save, then reconnect the test client's Wi-Fi or renew its DHCP lease.
+5. Temporarily disconnect Tailscale on the Mac to isolate the router path.
+   Run `dig example.org` and check Pi-hole's **Query Log** for the lookup.
+   Try another uncached name if the router already has the answer cached.
+
+Google Nest Wifi acts as a DNS proxy. Clients can still show the router's LAN
+address as their DNS server, and Pi-hole can show the router as the client for
+forwarded requests. Keep DHCP enabled on the router and disabled in Pi-hole.
+
+If IPv6 is enabled, check that IPv6 DNS settings also send queries through
+Pi-hole. Browser secure DNS and device-level DNS overrides can bypass the
+router's resolver. IPv6 can be temporarily disabled under **Advanced Networking
+> IPv6** while validating the IPv4 path.
+
+#### Tailscale DNS
+
+1. On the Pi 4, run the following so the DNS server itself does not adopt the
+   tailnet DNS configuration:
+
+   ```bash
+   sudo tailscale set --accept-dns=false
+   ```
+
+2. Connect the Mac to Tailscale and verify both DNS transports before changing
+   tailnet settings:
+
+   ```bash
+   dig @100.93.9.106 example.com
+   dig +tcp @100.93.9.106 example.com
+   ```
+
+3. In [Tailscale DNS settings](https://login.tailscale.com/admin/dns), keep
+   **MagicDNS** enabled. Select **Add nameserver > Custom** and add
+   `100.93.9.106` as a **global nameserver**, without a domain restriction.
+4. Remove other global public resolvers if consistent filtering is required,
+   then enable **Override DNS servers**. Preserve any intentional split DNS
+   settings. If clients use an exit node, enable **Use with exit node** for
+   the Pi-hole nameserver.
+5. Keep **Use Tailscale DNS settings** enabled on client devices. Any restrictive
+   tailnet policy or host firewall must allow those clients to reach the Pi 4
+   on both TCP and UDP port `53`.
+6. On a phone, turn Wi-Fi off and leave Tailscale connected. Browse new sites
+   and confirm the phone's requests appear in Pi-hole's **Query Log**. Also
+   confirm existing MagicDNS names and application URLs still resolve.
+
+The Pi-hole admin Service on `443` carries dashboard traffic; DNS goes directly
+to the Pi's Tailscale address on port `53`. No subnet route is needed for that
+address. The Compose configuration already sets `FTLCONF_dns_listeningMode` to
+`ALL` to accept queries on both LAN and Tailscale interfaces.
+
+#### Upstream DNS and recovery
+
+Pi-hole defaults to upstream resolvers `1.1.1.1;1.0.0.1`, configurable through
+`PIHOLE_DNS_UPSTREAMS` in Portainer. Public resolvers are appropriate here:
+Pi-hole filters queries before forwarding them upstream. Do not point its
+upstream DNS back to itself or to the Nest router, which forwards back to
+Pi-hole and would create a loop.
+
+Hermes explicitly uses Pi-hole at `192.168.86.49` for external DNS. Docker's
+embedded resolver (`127.0.0.11`) still handles Swarm service names. Pi-hole
+forwards only `dachshund-octatonic.ts.net` queries to the Pi's local Tailscale
+resolver at `100.100.100.100`; public names continue to use the public upstreams.
+The forwarding rule is set through `FTLCONF_misc_dnsmasq_lines`. Pi-hole uses
+host networking, which makes the device-local Tailscale resolver reachable.
+Do not use that resolver as Pi-hole's global upstream, because Tailscale's
+global DNS points back to Pi-hole.
+
+Apply DNS configuration changes by redeploying the `homelab` stack through
+Portainer using this repository's updated `docker-compose.yml`. Keep the
+existing stack environment variables and persistent volumes. The Compose file
+is the source of truth for both Hermes's `dns` setting and Pi-hole's forwarding
+rule; manage their deployment together through the stack.
+
+Wait for Pi-hole and Hermes to finish starting after the redeploy. Swarm does
+not guarantee startup ordering between these services. Pi-hole's restart
+briefly interrupts DNS for clients using it, and Hermes can return HTTP 502
+through Tailscale Serve until its dashboard is ready. Once DNS is responding,
+reconnect Hermes's MCP servers and retry the ChatGPT subscription login.
+
+For verification, open the Pi-hole container's console in Portainer and check
+both the tailnet forwarding rule and public DNS:
+
+```bash
+nslookup kasa-mcp.dachshund-octatonic.ts.net 192.168.86.49
+nslookup auth.openai.com 192.168.86.49
+```
+
+Then open the Hermes container's console in Portainer and verify all three
+names resolve from that container:
+
+```bash
+python - <<'PY'
+import socket
+
+for host in (
+    "auth.openai.com",
+    "kasa-mcp.dachshund-octatonic.ts.net",
+    "discord-mcp.dachshund-octatonic.ts.net",
+):
+    print(host, socket.gethostbyname_ex(host))
+PY
+```
+
+`Temporary failure in name resolution` inside Hermes indicates a container DNS
+problem even if the Pi host resolves the same name. A Pi-hole `NXDOMAIN` for a
+tailnet name indicates the tailnet forwarding path needs checking. Disabling
+ad blocking does not repair either resolver configuration issue.
+
 Keep DNS port `53` reachable only from trusted networks; do not forward it from
-the internet-facing router. A second public resolver advertised to clients can
-bypass filtering; this single Pi is the only filtering DNS server in this setup.
+the internet-facing router. This setup has one filtering DNS server, so keep
+the Pi 4 running. For recovery, restore Google Home DNS to **Automatic** and
+restore the previous Tailscale nameservers/override setting. An affected client
+can temporarily disable **Use Tailscale DNS settings**; at home, it will still
+depend on the router's DNS configuration.
 
-For filtering on tailnet clients, first test `dig @100.93.9.106 example.com`
-from a connected client. Then optionally add `100.93.9.106` as a global
-nameserver in Tailscale DNS settings and enable Override DNS servers. Keep
-MagicDNS enabled, allow DNS TCP/UDP `53` to the Pi 4 in the tailnet policy, and
-ensure the client accepts tailnet DNS settings. The Pi-hole admin Service on
-`443` does not carry DNS traffic. Do not make Pi-hole forward upstream queries
-back to itself or to a router that forwards DNS back to Pi-hole.
-
-See [Pi-hole Docker configuration](https://docs.pi-hole.net/docker/configuration/)
+See [Google DNS settings](https://support.google.com/googlehome/answer/6274141?hl=en),
+[Google DHCP reservations](https://support.google.com/googlehome/answer/6274660?hl=en),
+[Tailscale's Pi-hole guide](https://tailscale.com/docs/solutions/block-ads-all-devices-anywhere-using-raspberry-pi),
+[Tailscale DNS](https://tailscale.com/docs/reference/dns-in-tailscale),
+[Pi-hole Docker configuration](https://docs.pi-hole.net/docker/configuration/),
 and [FTL settings](https://docs.pi-hole.net/ftldns/configfile/).
 
 ### Open WebUI with Hermes

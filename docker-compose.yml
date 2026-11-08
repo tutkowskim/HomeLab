@@ -14,6 +14,9 @@ services:
     command: ["gateway", "run"]
     networks:
       - appnet
+    # Pi-hole resolves public names and forwards this tailnet's names to MagicDNS.
+    dns:
+      - 192.168.86.49
     # Publish only on the Pi 4 where this service runs, for Tailscale Serve.
     ports:
       - target: 9119
@@ -146,6 +149,8 @@ services:
       FTLCONF_webserver_port: "9080"
       FTLCONF_dns_listeningMode: "ALL"
       FTLCONF_dns_upstreams: ${PIHOLE_DNS_UPSTREAMS:-1.1.1.1;1.0.0.1}
+      # Pi-hole shares the Pi's host network, so it can reach local MagicDNS.
+      FTLCONF_misc_dnsmasq_lines: "server=/dachshund-octatonic.ts.net/100.100.100.100"
       # Keep the router responsible for DHCP and the host for timekeeping.
       FTLCONF_dhcp_active: "false"
       FTLCONF_ntp_ipv4_active: "false"
