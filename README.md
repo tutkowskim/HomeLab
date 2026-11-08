@@ -3,43 +3,125 @@
 Docker services for the home lab, managed with Portainer on a two-node Docker
 Swarm.
 
-## Tailnet go links
+## Current network configuration
 
-The `golink` service runs on `raspberrypi4` and joins Tailscale as a separate
-device named `go`. It needs no published host ports. The `golink_data` volume
-stores both its enrollment state and link database; preserve and back up it.
+The lab uses the `dachshund-octatonic.ts.net` tailnet for private application
+access. Tailscale runs directly on both Pis. Each Pi advertises named HTTPS
+Services that forward to local application ports. Clients must be connected to
+the tailnet and allowed by its access policy. TLS terminates in Tailscale Serve;
+the hop from Serve to each local backend uses HTTP.
 
-For initial enrollment, generate a non-ephemeral Tailscale auth key tagged
-`tag:homelab`. Set `GOLINK_TS_AUTHKEY` in the Portainer stack environment and
-redeploy from the updated Compose file. Never commit the key. Once `go` appears
-online, remove the environment variable and redeploy; enrollment persists in
-the volume. Approve the device if your tailnet requires device approval.
+Docker Swarm continues to use the reserved LAN addresses for cluster traffic
+and the `appnet` overlay network. Tailscale does not replace Swarm networking.
+
+| Host | Role | Reserved LAN IP | Tailscale IP |
+| --- | --- | --- | --- |
+| `raspberrypi4` | Swarm manager; Hermes, Portainer, golink | `192.168.86.49` | `100.93.9.106` |
+| `raspberrypi3` | Swarm worker; Kasa MCP, Discord MCP | `192.168.86.80` | `100.121.14.84` |
+
+Use DHCP reservations to retain the LAN addresses. Keep the Pi 4 as the only
+manager; two nodes do not provide control-plane high availability. Run
+`docker stack`, `docker service`, and `docker node` management commands on the
+Pi 4. Worker-node errors for these commands on the Pi 3 are expected.
+
+```mermaid
+flowchart TB
+    client["Mac / Windows / iPhone / iPad<br/>Connected to Tailscale"]
+
+    subgraph tailnet["Tailnet: dachshund-octatonic.ts.net"]
+        endpoints["Named HTTPS Services on TCP 443<br/>hermes / portainer / kasa-mcp / discord-mcp"]
+
+        subgraph pi4["raspberrypi4 - Swarm manager<br/>LAN 192.168.86.49 | Tailscale 100.93.9.106"]
+            swarm4["Docker Swarm manager"]
+            serve4["Tailscale Serve<br/>hermes + portainer"]
+            hermes["Hermes<br/>host 9119 to container 9119"]
+            portainer["Portainer - separate stack<br/>host 9000 to container 9000"]
+            go["golink - separate tailnet device: go<br/>No published host ports"]
+            data[("golink_data<br/>Enrollment state + link database")]
+        end
+
+        subgraph pi3["raspberrypi3 - Swarm worker<br/>LAN 192.168.86.80 | Tailscale 100.121.14.84"]
+            swarm3["Docker Swarm worker"]
+            serve3["Tailscale Serve<br/>kasa-mcp + discord-mcp"]
+            kasa["Kasa MCP - host network<br/>TCP 8001"]
+            discord["Discord MCP - appnet overlay<br/>host 8002 to container 8000"]
+        end
+    end
+
+    client -->|"HTTPS"| endpoints
+    endpoints -->|"hermes / portainer"| serve4
+    endpoints -->|"kasa-mcp / discord-mcp"| serve3
+    serve4 -->|"HTTP 127.0.0.1:9119"| hermes
+    serve4 -->|"HTTP 127.0.0.1:9000"| portainer
+    serve3 -->|"HTTP 127.0.0.1:8001"| kasa
+    serve3 -->|"HTTP 127.0.0.1:8002"| discord
+    client -->|"http://go/hermes and other shortcuts"| go
+    go -->|"Redirect to destination URL"| endpoints
+    go --- data
+    swarm4 <-->|"Swarm control and overlay traffic over LAN"| swarm3
+    kasa -->|"LAN discovery and control"| devices["Kasa devices on trusted LAN"]
+```
+
+Golink redirects the client to an application; it does not carry application
+traffic after the redirect.
+
+### Service routes and ports
+
+| Tailscale Service | Client URL | Service host | Local HTTP backend |
+| --- | --- | --- | --- |
+| `svc:hermes` | `https://hermes.dachshund-octatonic.ts.net` | Pi 4 | `127.0.0.1:9119` |
+| `svc:portainer` | `https://portainer.dachshund-octatonic.ts.net` | Pi 4 | `127.0.0.1:9000` |
+| `svc:kasa-mcp` | `https://kasa-mcp.dachshund-octatonic.ts.net/mcp` | Pi 3 | `127.0.0.1:8001` |
+| `svc:discord-mcp` | `https://discord-mcp.dachshund-octatonic.ts.net/mcp` | Pi 3 | `127.0.0.1:8002` |
+
+Hermes and Discord use `mode: host` port publishing, so their ports are exposed
+only on the node running their task, rather than through the Swarm routing
+mesh. Discord's application still listens on container port `8000`; host port
+`8002` avoids the existing Portainer port `8000`. Kasa uses the host network
+and listens directly on `8001`, with no Docker port mapping.
+
+These backend ports are reachable on their hosts' LAN interfaces too; forwarding
+to `127.0.0.1` in Serve does not make a published Docker port loopback-only.
+The separate Portainer stack currently publishes ports `8000`, `9000`, and
+`9443` through Swarm ingress. Its Tailscale route uses HTTP port `9000`.
+Both MCP allowlists include their tailnet names and local backend addresses.
+
+The `appnet` overlay connects Hermes, Discord, and golink.
+Kasa and AirConnect use the external Docker `host` network for LAN access.
+AirConnect has no placement constraint in the current Compose file.
+
+### Tailnet go links
+
+The `golink` service runs on the Pi 4 and joins Tailscale as a separate device
+named `go`. It needs no published host ports. The `golink_data` volume stores
+its enrollment state and link database; preserve it and back it up. This is a
+regular tailnet device, not an additional `svc:go` Service.
+
+For initial enrollment:
+
+1. Generate an auth key in [Tailscale Keys](https://login.tailscale.com/admin/settings/keys).
+   Use `tag:homelab`, disable Reusable and Ephemeral, and enable Pre-approved
+   if available. A one-day key expiration is sufficient for enrollment.
+2. Set `GOLINK_TS_AUTHKEY` in the Portainer `homelab` stack environment and
+   redeploy from the updated Compose file. Never commit the key.
+3. Wait for `go` to appear online in Tailscale Machines; approve it if required.
+4. Remove the environment variable and redeploy. Enrollment persists in the
+   volume, so the key is no longer needed.
 
 With MagicDNS enabled, open `http://go/` from a connected client and create:
 
-| Link | Destination |
+| Shortcut | Destination |
 | --- | --- |
-| `hermes` | `https://hermes.dachshund-octatonic.ts.net` |
-| `portainer` | `https://portainer.dachshund-octatonic.ts.net` |
-| `kasa` | `https://kasa-mcp.dachshund-octatonic.ts.net/mcp` |
-| `discord` | `https://discord-mcp.dachshund-octatonic.ts.net/mcp` |
+| `http://go/hermes` | `https://hermes.dachshund-octatonic.ts.net` |
+| `http://go/portainer` | `https://portainer.dachshund-octatonic.ts.net` |
+| `http://go/kasa` | `https://kasa-mcp.dachshund-octatonic.ts.net/mcp` |
+| `http://go/discord` | `https://discord-mcp.dachshund-octatonic.ts.net/mcp` |
 
-Use the full MCP destination URLs in MCP clients. MCP endpoints are protocol
-endpoints, not browser dashboards.
+Include `http://` if the browser treats a bare `go/hermes` as a search. The full
+node name is `go.dachshund-octatonic.ts.net`. Use full HTTPS destination URLs
+in MCP clients; MCP endpoints are protocol endpoints, not browser dashboards.
 
 See the [official golink documentation](https://github.com/tailscale/golink).
-
-## Proposed topology
-
-| Host | Role | IP address |
-| --- | --- | --- |
-| `raspberrypi4` | Swarm manager and primary workload node | `192.168.86.49` |
-| `raspberrypi3` | Swarm worker for lightweight workloads | `192.168.86.80` |
-
-Use DHCP reservations in the router so both hosts retain these addresses.
-
-Two nodes do not provide control-plane high availability. Keep the Pi 4 as the
-only manager. A resilient Swarm manager quorum requires three manager nodes.
 
 ## 1. Verify the operating system
 
@@ -323,225 +405,75 @@ services:
 
 Then open `http://192.168.86.49:8080`.
 
-## 11. Configure a Let's Encrypt wildcard certificate
+## 11. Configure Tailscale application access
 
-The public DNS zone for `tutkowski.com` is hosted by Amazon Route 53. Use
-Let's Encrypt's DNS-01 challenge with Certbot's Route 53 plugin to obtain a
-wildcard certificate. DNS-01 does not require the services themselves to be
-publicly reachable, but the validation TXT record must be visible in public
-DNS.
-
-Request both `tutkowski.com` and `*.tutkowski.com`. The wildcard alone does not
-cover the apex domain, and it covers only one subdomain label. For example, it
-covers `portainer.tutkowski.com`, but not
-`app.portainer.tutkowski.com`.
-
-Run the following steps on the node where `nginx-proxy` terminates TLS. These
-instructions use the repository's standalone `docker-compose.yml`; if the
-proxy is later moved into the Swarm, constrain Certbot and Nginx to the node
-that contains the certificate volume.
-
-### Create a restricted Route 53 IAM identity
-
-In AWS IAM, create a dedicated policy for Certbot. Replace
-`YOUR_HOSTED_ZONE_ID` with the public Route 53 hosted-zone ID for
-`tutkowski.com`:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:ListHostedZones",
-        "route53:GetChange"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": "route53:ChangeResourceRecordSets",
-      "Resource": "arn:aws:route53:::hostedzone/YOUR_HOSTED_ZONE_ID",
-      "Condition": {
-        "ForAllValues:StringEquals": {
-          "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
-            "_acme-challenge.tutkowski.com"
-          ],
-          "route53:ChangeResourceRecordSetsRecordTypes": [
-            "TXT"
-          ],
-          "route53:ChangeResourceRecordSetsActions": [
-            "CREATE",
-            "UPSERT",
-            "DELETE"
-          ]
-        }
-      }
-    }
-  ]
-}
-```
-
-Attach the policy to a dedicated IAM user and create an access key.
-
-On the Pi 4, store the access key outside this repository:
+Install and authenticate Tailscale directly on each Pi:
 
 ```bash
-sudo install -d -m 700 /opt/certbot/aws
-sudoedit /opt/certbot/aws/credentials
-sudo chmod 600 /opt/certbot/aws/credentials
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo systemctl enable --now tailscaled
+sudo tailscale up
 ```
 
-Enter the credentials using the standard AWS format:
+Join the same tailnet as the client devices. In the Tailscale admin console:
 
-```ini
-[default]
-aws_access_key_id = YOUR_ACCESS_KEY_ID
-aws_secret_access_key = YOUR_SECRET_ACCESS_KEY
-```
+1. Enable MagicDNS and HTTPS certificates under DNS settings.
+2. Define `tag:homelab` with `autogroup:admin` as its owner and assign it to both
+   Pis. Merge this into the existing access policy rather than replacing it.
+3. Define Services named `hermes`, `portainer`, `kasa-mcp`, and `discord-mcp`, each
+   with endpoint `tcp:443`. Allow the intended clients in the tailnet policy.
+4. Deploy the current `homelab` Compose definition through Portainer before
+   configuring the routes below. This applies host ports and MCP allowlists.
 
-Treat this file like a password. Never commit it or place it in a Docker image.
-
-### Add Certbot to Docker Compose
-
-Add port 443 and a read-only certificate volume to `nginx-proxy`:
-
-```yaml
-services:
-  nginx-proxy:
-    # Keep the existing settings.
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - letsencrypt:/etc/letsencrypt:ro
-```
-
-Add a Certbot service at the same level as `nginx-proxy`:
-
-```yaml
-  certbot:
-    image: certbot/dns-route53:latest
-    profiles:
-      - tools
-    volumes:
-      - letsencrypt:/etc/letsencrypt
-      - /opt/certbot/aws:/root/.aws:ro
-```
-
-Add the shared named volume at the bottom of the file, merging it with any
-existing `volumes` section:
-
-```yaml
-volumes:
-  letsencrypt:
-```
-
-Do not add the Nginx TLS directives yet. Nginx will fail to start if its
-configuration references certificate files that have not been created.
-
-### Issue the initial certificate
-
-From the directory containing `docker-compose.yml`, run:
+Run on the Pi 4:
 
 ```bash
-docker compose run --rm certbot certonly \
-  --dns-route53 \
-  --non-interactive \
-  --agree-tos \
-  --email YOUR_EMAIL_ADDRESS \
-  --cert-name tutkowski.com \
-  -d tutkowski.com \
-  -d '*.tutkowski.com'
+sudo tailscale serve --service=svc:hermes --https=443 http://127.0.0.1:9119
+sudo tailscale serve --service=svc:portainer --https=443 http://127.0.0.1:9000
 ```
 
-Certbot temporarily creates `_acme-challenge.tutkowski.com` TXT records in
-Route 53, waits for validation, and removes them afterward. The resulting files
-are stored in the `letsencrypt` volume under
-`/etc/letsencrypt/live/tutkowski.com/`.
-
-### Enable TLS in Nginx
-
-After the certificate exists, add the following settings to each HTTPS virtual
-host in `nginx.conf`:
-
-```nginx
-listen 443 ssl;
-ssl_certificate /etc/letsencrypt/live/tutkowski.com/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/tutkowski.com/privkey.pem;
-ssl_protocols TLSv1.2 TLSv1.3;
-```
-
-Use a separate port 80 server block to redirect HTTP to HTTPS while preserving
-the default `/healthz` endpoint:
-
-```nginx
-server {
-    listen 80;
-    server_name portainer.tutkowski.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name portainer.tutkowski.com;
-
-    ssl_certificate /etc/letsencrypt/live/tutkowski.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/tutkowski.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-
-    location / {
-        proxy_pass http://host.docker.internal:9000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-```
-
-Repeat that pattern for each proxied hostname. Test the generated Nginx
-configuration before recreating the proxy:
+Run on the Pi 3:
 
 ```bash
-docker compose run --rm --no-deps nginx-proxy nginx -t
-docker compose up -d nginx-proxy
+sudo tailscale serve --service=svc:kasa-mcp --https=443 http://127.0.0.1:8001
+sudo tailscale serve --service=svc:discord-mcp --https=443 http://127.0.0.1:8002
 ```
 
-### Test and automate renewal
-
-Test Certbot's renewal path against Let's Encrypt's staging environment:
+Approve each advertised host under its Service in the Tailscale admin console.
+Service-mode Serve commands persist in the background. Inspect them on either
+Pi with:
 
 ```bash
-docker compose run --rm certbot renew --dry-run
+sudo tailscale serve status --json
 ```
 
-Then edit root's crontab:
+From a connected client, open the Hermes and Portainer HTTPS URLs and verify
+both MCP health endpoints:
 
 ```bash
-sudo crontab -e
+curl --fail --show-error https://kasa-mcp.dachshund-octatonic.ts.net/healthz
+curl --fail --show-error https://discord-mcp.dachshund-octatonic.ts.net/healthz
 ```
 
-Add the following entry, replacing `/path/to/HomeLab` with the absolute path on
-the Docker host:
+Tailscale provisions the HTTPS certificates for these tailnet names.
+Configuration changes belong in `docker-compose.yml` and should be redeployed
+through Portainer so future deployments retain them. Tailscale Serve
+configuration is stored separately on each host.
 
-```cron
-17 3,15 * * * cd /path/to/HomeLab && /usr/bin/docker compose run --rm certbot renew --quiet && /usr/bin/docker compose exec -T nginx-proxy nginx -s reload
+See [Tailscale Services](https://tailscale.com/docs/features/tailscale-services)
+and the [Linux installation guide](https://tailscale.com/docs/install/linux).
+
+### Verify deployed services
+
+Run on the Pi 4:
+
+```bash
+docker stack services homelab
+docker service ls --format 'table {{.Name}}\t{{.Ports}}'
 ```
 
-The job checks twice daily. Certbot renews only when the certificate is near
-expiry, and Nginx reloads the certificate files without stopping the proxy.
-
-The wildcard certificate secures hostnames; it does not create DNS records for
-them. Each service still needs an appropriate Route 53 A, AAAA, or CNAME record
-unless a separate wildcard DNS record is used.
-
-For background and current requirements, see the official
-[Let's Encrypt challenge documentation](https://letsencrypt.org/docs/challenge-types/),
-[Certbot Route 53 plugin documentation](https://certbot-dns-route53.readthedocs.io/en/stable/),
-and [AWS Route 53 record-level IAM documentation](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-permissions.html).
+The `homelab` stack contains AirConnect, Hermes, Discord MCP, Kasa MCP, and
+golink. Portainer runs in its separate stack.
 
 ## Storage and migration notes
 
@@ -571,17 +503,16 @@ Do not run multiple replicas of a database unless the database itself is
 configured for replication. Multiple replicas sharing an ordinary directory can
 corrupt the data.
 
-The repository's current `docker-compose.yml` is designed for standalone Docker
-and should not be deployed to Swarm unchanged:
+The repository's `docker-compose.yml` is deployed as the `homelab` Swarm stack
+through Portainer. Placement constraints keep Hermes and golink on the Pi 4,
+and both MCP servers on the Pi 3. Keep these deployment details in mind:
 
-- `airconnect` and `kasa_mcp_server` use host networking for LAN discovery and
-  should be pinned to an appropriate node or remain standalone.
-- `container_name` and some modern Compose options do not translate directly to
-  Swarm stacks.
-- Variables currently supplied from `.env` must be entered in Portainer or
-  converted to Swarm secrets/configs. Do not commit secret values.
-- Verify that every image supports `linux/arm64` before allowing Swarm to place it
-  on either Pi.
+- `airconnect` and `kasa_mcp_server` use host networking for LAN discovery.
+- `container_name`, standalone `restart`, and some Compose security options
+  are not supported by Swarm stacks; `deploy.restart_policy` controls restarts.
+- Supply deployment variables through Portainer or suitable secrets/configs.
+  Do not commit secret values.
+- Verify image support for `linux/arm64` before changing images.
 
 Migrate one non-critical service at a time and confirm its networking, storage,
 health check, and restart behavior before moving the next service.
@@ -589,10 +520,9 @@ health check, and restart behavior before moving the next service.
 ## Discord MCP server
 
 `discord_mcp_server` runs one replica on `raspberrypi3` using the shared
-`appnet` overlay network. Nginx routes `discord-mcp.tutkowski.com` to port
-8000; configure MCP clients with `http://discord-mcp.tutkowski.com/mcp`.
-The hostname must resolve to the Nginx host. This route currently uses HTTP,
-matching the other routes in `nginx.conf`.
+`appnet` overlay network. Container port `8000` is published as host port `8002`
+on the Pi 3 for Tailscale Serve. Configure MCP clients with
+`https://discord-mcp.dachshund-octatonic.ts.net/mcp`.
 
 Supply `DISCORD_MCP_BOT_TOKEN` and `DISCORD_MCP_GUILD_ID` through the deployment
 environment (or Portainer stack variables). Optional
@@ -602,6 +532,6 @@ access. Optional Sentry settings are `DISCORD_MCP_SENTRY_DSN`,
 `DISCORD_MCP_SENTRY_ENVIRONMENT` (default `production`), and
 `DISCORD_MCP_SENTRY_TRACES_SAMPLE_RATE` (default `1.0`). Do not commit tokens.
 
-The service exposes `/healthz` internally for its container health check.
-Redeploy the stack after supplying the variables to apply the service and
-the updated `nginx_config_v5` configuration.
+The service exposes `/healthz` for its container health check and through its
+Tailscale HTTPS endpoint. Redeploy the stack through Portainer after changing
+its deployment variables or Compose settings.

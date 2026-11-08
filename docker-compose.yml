@@ -47,7 +47,7 @@ services:
       - DISCORD_ALLOWED_CHANNEL_IDS=${DISCORD_MCP_ALLOWED_CHANNEL_IDS:-*}
       - DISCORD_MCP_HOST=0.0.0.0
       - DISCORD_MCP_PORT=8000
-      - DISCORD_MCP_ALLOWED_HOSTS=discord_mcp_server:8000,127.0.0.1:8000,localhost:8000,127.0.0.1:8002,localhost:8002,discord-mcp.tutkowski.com,discord-mcp.dachshund-octatonic.ts.net
+      - DISCORD_MCP_ALLOWED_HOSTS=discord_mcp_server:8000,127.0.0.1:8000,localhost:8000,127.0.0.1:8002,localhost:8002,discord-mcp.dachshund-octatonic.ts.net
       - DISCORD_MCP_MAX_REQUEST_BODY_BYTES=12582912
       - DISCORD_MCP_LOG_LEVEL=DEBUG
       - SENTRY_DSN=${DISCORD_MCP_SENTRY_DSN}
@@ -102,7 +102,7 @@ services:
       - KASA_CACHE_TTL_SECONDS=60
       - KASA_MCP_HOST=0.0.0.0
       - KASA_MCP_PORT=8001
-      - KASA_MCP_ALLOWED_HOSTS=127.0.0.1:8001,kasa-mcp.tutkowski.com,kasa-mcp.dachshund-octatonic.ts.net
+      - KASA_MCP_ALLOWED_HOSTS=127.0.0.1:8001,kasa-mcp.dachshund-octatonic.ts.net
       - KASA_MCP_MAX_REQUEST_BODY_BYTES=4194304
       - KASA_MCP_LOG_LEVEL=DEBUG
       - SENTRY_DSN=${KASA_MCP_SENTRY_DSN}
@@ -149,31 +149,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-
-  nginx-proxy:
-    image: nginx:alpine
-    container_name: nginx-proxy
-    restart: unless-stopped
-    networks:
-      - appnet
-    deploy:
-      placement:
-        constraints:
-          - node.hostname == raspberrypi4
-      restart_policy:
-        condition: any
-        delay: 5s
-    ports:
-      - "80:80"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    configs:
-      - source: nginx_config_v5
-        target: /etc/nginx/conf.d/default.conf
-
-configs:
-  nginx_config_v5:
-    file: ./nginx.conf
 
 volumes:
   hermes_data:
