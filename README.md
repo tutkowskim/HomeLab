@@ -37,7 +37,7 @@ flowchart TB
             hermes["Hermes<br/>host 9119 to container 9119"]
             pihole["Pi-hole - host network<br/>DNS TCP/UDP 53 | admin HTTP 9080"]
             chat["Open WebUI - chat<br/>host 9081 to container 8080"]
-            hermesapi["Hermes OpenAI-compatible API<br/>appnet only: hermes_agent:8642/v1"]
+            hermesapi["Hermes OpenAI-compatible API<br/>appnet only: tasks.homelab_hermes_agent:8642/v1"]
             portainer["Portainer - separate stack<br/>host 9000 to container 9000"]
             go["golink - separate tailnet device: go<br/>No published host ports"]
             data[("golink_data<br/>Enrollment state + link database")]
@@ -574,13 +574,20 @@ settings persist in `open_webui_data` mounted at `/app/backend/data`.
 
 The Compose definition enables Hermes's API on container port `8642` bound to
 `0.0.0.0`. That API port is not published to the host. Open WebUI reaches
-`http://hermes_agent:8642/v1` over `appnet`, authenticating with the same
+`http://tasks.homelab_hermes_agent:8642/v1` over `appnet`, authenticating with the same
 `HERMES_API_SERVER_KEY` supplied to Hermes. This is separate from Hermes's
 dashboard on `9119`; no browser-side connection or API CORS setting is needed.
 
+The `tasks.homelab_hermes_agent` DNS name resolves directly to Hermes task
+addresses. It bypasses the service VIP, which failed TCP connectivity checks
+while direct task connections succeeded. This restores a usable path without
+repairing the underlying VIP routing issue. Keep the DNS name rather than a
+container IP, because task addresses change on replacement. The name assumes
+the Portainer stack is named `homelab`.
+
 Open `https://chat.dachshund-octatonic.ts.net` and create the first account,
 which becomes the administrator. In Admin Settings, verify the OpenAI-compatible
-connection URL is `http://hermes_agent:8642/v1`, with the Hermes API key. Select
+connection URL is `http://tasks.homelab_hermes_agent:8642/v1`, with the Hermes API key. Select
 `hermes-agent` and test a chat. Hermes retains its existing model-provider and
 tool configuration. Disable further signups in Admin Settings if only your
 account should use the service. Chats submitted here can invoke Hermes tools

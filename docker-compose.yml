@@ -179,7 +179,8 @@ services:
       WEBUI_AUTH: "true"
       ENABLE_OLLAMA_API: "false"
       ENABLE_OPENAI_API: "true"
-      OPENAI_API_BASE_URL: http://hermes_agent:8642/v1
+      # Resolve the running task directly, bypassing Swarm's service VIP.
+      OPENAI_API_BASE_URL: http://tasks.homelab_hermes_agent:8642/v1
       OPENAI_API_KEY: ${HERMES_API_SERVER_KEY:?Set HERMES_API_SERVER_KEY in Portainer}
     volumes:
       - open_webui_data:/app/backend/data
